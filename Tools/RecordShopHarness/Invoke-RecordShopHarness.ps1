@@ -322,13 +322,35 @@ Return JSON matching the supplied schema.
 "@
 
     $auditCode = Invoke-CodexRun -Prompt ($auditBase + $auditDynamic) -Model $AuditorModel -Effort $AuditorEffort -LastMessagePath $auditOut -SchemaPath $auditSchemaPath
-    if ($auditCode -ne 0 -or -not (Test-Path $auditOut)) {
-        Write-Host "Independent audit did not complete. No commit/push." -ForegroundColor Red
+    if (-not (Test-Path -LiteralPath $auditOut -PathType Leaf)) {
+        Write-Host "Independent audit produced no JSON file (exit code $auditCode). No commit/push." -ForegroundColor Red
         exit 22
     }
 
-    try { $audit = Get-Content $auditOut -Raw -Encoding UTF8 | ConvertFrom-Json }
-    catch { Write-Host "Could not parse auditor JSON. No commit/push." -ForegroundColor Red; Get-Content $auditOut -Encoding UTF8; exit 23 }
+    try {
+        $audit = Get-Content -LiteralPath $auditOut -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+        if ($audit -isnot [System.Management.Automation.PSCustomObject]) {
+            throw "Auditor JSON must be a top-level object."
+        }
+        $requiredAuditFields = @(
+            "verdict", "safe_to_commit", "summary", "files_to_commit", "commit_message",
+            "e2e", "last_natural_stage", "first_blocker", "validations",
+            "remaining_blockers", "continue_recommended"
+        )
+        $auditFields = @($audit.PSObject.Properties.Name)
+        $missingAuditFields = @($requiredAuditFields | Where-Object { $auditFields -cnotcontains $_ })
+        if ($missingAuditFields.Count -gt 0) {
+            throw "Auditor JSON is missing required fields: $($missingAuditFields -join ', ')"
+        }
+    }
+    catch {
+        Write-Host "Invalid auditor JSON: $($_.Exception.Message). No commit/push." -ForegroundColor Red
+        exit 23
+    }
+
+    if ($auditCode -ne 0) {
+        Write-Warning "Auditor Codex exited with code $auditCode. Continuing with the validated structured JSON result."
+    }
 
     Write-Host "AUDIT VERDICT: $($audit.verdict)"
     Write-Host "SAFE TO COMMIT: $($audit.safe_to_commit)"
@@ -358,8 +380,9 @@ Remaining blockers: $($audit.remaining_blockers -join '; ')
     }
 
     $currentChanged = @(Get-ChangedPaths)
-    $changedNorm = @($currentChanged | ForEach-Object { $_.Replace("\","/") } | Sort-Object -Unique)
-    $commitNorm = @($filesToCommit | ForEach-Object { $_.Replace("\","/") } | Sort-Object -Unique)
+    # Keep empty sets as arrays and discard null entries before normalizing paths.
+    $changedNorm = @($currentChanged | Where-Object { $_ } | ForEach-Object { $_.Replace("\","/") } | Sort-Object -Unique)
+    $commitNorm = @($filesToCommit | Where-Object { $_ } | ForEach-Object { $_.Replace("\","/") } | Sort-Object -Unique)
 
     $missingFromAudit = @($changedNorm | Where-Object { $commitNorm -notcontains $_ })
     $unknownFromAudit = @($commitNorm | Where-Object { $changedNorm -notcontains $_ })
