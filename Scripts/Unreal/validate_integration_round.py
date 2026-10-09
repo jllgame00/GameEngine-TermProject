@@ -14,9 +14,10 @@ from pathlib import Path
 import unreal
 
 ROOT = Path(unreal.Paths.project_dir())
-OUT = ROOT / 'Saved/OvernightIntegration/Round1/repair-runtime.json'
+OUT = ROOT / 'Saved/OvernightIntegration/Round1/worker-runtime.json'
 sys.path.insert(0, str(ROOT / 'Scripts/Unreal'))
 from checkpoint_repair_checks import physical_input_checks, rpm_ui_checks
+from dialogue_handoff_checks import dialogue_checks
 FLOW = '/Game/RecordShop/Core/Flow/BP_GameFlowManager'
 SHELF = '/Game/RecordShop/Interaction/Actors/BP_RecordShelf'
 TURNTABLE = '/Game/RecordShop/Interaction/Actors/BP_Turntable'
@@ -49,7 +50,7 @@ def check(name, action):
 
 save()  # Invalidate an earlier result even if preflight fails before PIE starts.
 RESULT['startup_world'] = editor.get_editor_world().get_path_name()
-for path in [FLOW, SHELF, TURNTABLE, SELECT_UI, TURNTABLE_UI, CUSTOMER, '/Game/DialogueManager',
+for path in [FLOW, SHELF, TURNTABLE, SELECT_UI, TURNTABLE_UI, CUSTOMER, '/Game/DialogueManager', '/Game/RecordShop/UI/Dialogue/WBP_Dialogue',
              '/Game/RecordShop/Interaction/Components/BPC_Interaction',
              '/Game/RecordShop/Interaction/Interfaces/BPI_Interactable',
              '/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter',
@@ -66,10 +67,11 @@ assert level.load_level('/Game/RecordShop/Maps/Greybox/L_RecordShop_Greybox')
 level.editor_request_begin_play()
 start = time.monotonic()
 state = {'began': None, 'sample': -1, 'tested': False, 'ended': False,
-         'keyboard': None, 'keyboard_next': 0, 'exit_requested': False}
+         'keyboard': None, 'keyboard_next': 0, 'exit_requested': False, 'screenshot': False}
 
 
 def diagnostics(world, flow):
+    dialogue_checks(world, flow, cls, RESULT, check)
     pc = unreal.GameplayStatics.get_player_controller(world, 0)
     pawn = unreal.GameplayStatics.get_player_pawn(world, 0)
     shelves = list(unreal.GameplayStatics.get_all_actors_of_class(world, cls(SHELF)))
@@ -233,6 +235,12 @@ def tick(delta):
                                       'customer': active.get_name() if active else None,
                                       'location': str(active.get_actor_location()) if active else None})
             save()
+        if elapsed >= 12 and not state['screenshot'] and '-nullrhi' not in unreal.SystemLibrary.get_command_line().lower():
+            state['screenshot'] = True
+            target = ROOT / 'Saved/OvernightIntegration/Round1/worker-dialogue.png'
+            unreal.SystemLibrary.execute_console_command(world, 'Shot showui filename="' + str(target) + '" -nosuffix')
+            RESULT['screenshot_requested'] = str(target)
+            save()
         if elapsed >= 15 and not state['tested']:
             state['tested'] = True
             RESULT['last_natural_state'] = str(flow.get_editor_property('CurrentState'))
@@ -283,6 +291,7 @@ def tick(delta):
                 return {'kind': 'isolated repeated exit consumer, not another natural customer cycle',
                         'remaining_modals': 0, 'cursor': False}
             check('selection_exit_cleanup_and_repeat', repeat_exit_cleanup)
+            RESULT['assertions_pass'] = all(item.get('pass', True) for item in RESULT['isolated'].values())
             RESULT['complete'] = True
             save()
             level.editor_request_end_play()

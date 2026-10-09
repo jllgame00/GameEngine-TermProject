@@ -1,4 +1,137 @@
-﻿# Overnight Integration - 2026-10-09
+# Checkpoint crash investigation — October 10, 2026
+
+This is the current safety report for the rejected October 9 integration checkpoint. It supersedes the earlier approval and terminal-work statements in the historical reports below and in the October 10 dialogue report.
+
+- **Checkpoint crash repair: PARTIAL. Safe to commit: false. Ready for approval re-audit: no.**
+- **Crash reproduced: YES. Full rendered validation: FAIL.** A complete JSON and all passing assertions do not override `0xC0000005` / `-1073741819`.
+- **Observed source: engine/editor runtime shutdown (Core/Slate heap destruction).** The native fault was captured after Unreal logged normal exit. The exact retained Slate owner is not established; there is no proven validation cleanup fix or production Blueprint fix.
+- **Natural dialogue plumbing: PASS. NullRHI regression: PASS. Blueprint compile: PASS (12/12).** Product E2E remains FAIL.
+- **Startup condition errors: EXPLAINED. Production-map cook smoke: PASS with warnings.** No packaged build was produced.
+- Branch remains `feature/overnight-integration-2026-10-09`; HEAD remains `69d835ccdbbe887567d4527e12ec9e3d3a8a4a20`.
+
+## Separate blockers
+
+1. **Product / E2E:** `/Game/CustomerDialogue` still contains only the blank `NewRow`. Live customer/dialogue/mood mapping is absent. Last natural stage: production Greybox startup -> customer spawn/entry/Ready -> root DialogueManager.StartDialogue -> exactly one dialogue widget showing the blank row. Automated Next still finishes dialogue and restores Explore/input. Fixtures and injected FinishResult are isolated checks, not natural customer-cycle completion.
+2. **Checkpoint safety:** intermittent native access violation during editor process shutdown remains unresolved, including a fresh full D3D12 run. Neither authored dialogue nor unavailable contributor assets explain away this gate.
+3. **Independent downstream work:** LP audio and turntable completion notification/Flow handoff, recommendation request/scoring/result contracts and natural Result UI consumption, unavailable contributor mesh/request/presentation binaries, and complete natural E2E remain outstanding. Startup diagnostics are now explained and the current map cooks. Packaging, deterministic repeat-cook equivalence and contributor asset approval are not claimed. Further independent investigation remains possible; autonomous work is not exhausted.
+
+## Rendered process isolation
+
+All runs used the installed UE 5.8.2, CL 56702186. Rendered runs selected D3D12/SM6 on the RTX 3070; NullRHI is recorded separately. Each completed scope has a generated script, exact argv, runtime JSON, log and `-process.json` in ignored `Saved/CheckpointCrashRepair/`. Process JSON records completion, Python fatal state, exit code/hex, final assertion and teardown markers. The reviewable runner additionally checks the expected assertion and compile counts and returns failure for a native exception.
+
+The table's assertion column describes test logic only. Every `0xc0000005` row is a **process FAIL**, despite the assertions passing. Editor-only controls have no gameplay assertions.
+
+| Scope | Assertion groups | Unreal exit | Last assertion | Evidence prefix |
+| --- | --- | --- | --- | --- |
+| Full D3D12 baseline | 16 / all passed | 0x0 | `selection_exit_cleanup_and_repeat` | `isolate-all` |
+| A: natural dialogue observation | 1 / all passed | 0x0 | `dialogue_natural_ready_start_ui` | `isolate-natural` |
+| B: Next and close | 2 / all passed | 0xc0000005 | `dialogue_natural_next_finished_explore` | `isolate-close` |
+| Additional dialogue fixtures | 6 / all passed | 0xc0000005 | `dialogue_modal_cleanup_idempotent` | `isolate-dialogue` |
+| C: Record Selection | 3 / all passed | 0x0 | `selection_reentry_cross_modal_and_all_records` | `serial-selection` |
+| D: Turntable (selection setup included) | 8 / all passed | 0xc0000005 | `rpm78_widget_button_path` | `serial-turntable` |
+| E: Enhanced Input | 3 / all passed | 0x0 | `physical_input_sphere_trace_interface` | `serial-physical` |
+| Slate Escape / reopen | 3 / all passed | 0x0 | `slate_escape_close_reopen_and_unrelated_key` | `serial-keyboard` |
+| F: customer exit / repeat cleanup | 4 / all passed | 0x0 | `selection_exit_cleanup_and_repeat` | `serial-exit` |
+| Full NullRHI regression | 16 / all passed | 0x0 | `selection_exit_cleanup_and_repeat` | `serial-nullrhi` |
+| Wait for PIE stop, trial 1 | 2 / all passed | 0x0 | `dialogue_natural_next_finished_explore` | `serial-staged-close-1` |
+| Wait for PIE stop, trial 2 | 2 / all passed | 0x0 | `dialogue_natural_next_finished_explore` | `serial-staged-close-2` |
+| Wait for PIE stop, trial 3 | 2 / all passed | 0xc0000005 | `dialogue_natural_next_finished_explore` | `serial-staged-close-3` |
+| Final full D3D12, reviewable tool | 16 / all passed | 0xc0000005 | `selection_exit_cleanup_and_repeat` | `20261009T162338958811Z-0-all` |
+| Editor startup only, no PIE, trial 1 | 0 / all passed | 0x0 | `N/A (editor-only control)` | `no-pie-startup-1` |
+| Editor startup only, no PIE, trial 2 | 0 / all passed | 0xc0000005 | `N/A (editor-only control)` | `no-pie-startup-2` |
+| 12 compiles only, no PIE | 0 / all passed | 0xc0000005 | `N/A (editor-only control)` | `no-pie-compile-1` |
+
+The completed normal-shutdown scopes reached `request_end_play`, `end_play_request_returned`, callback unregistration and `quit_editor_returned`. The failed ones also reached `LogD3D12RHI: ~FD3D12DynamicRHI`, `LogExit: Exiting` and log closure. There was no accompanying fresh Blueprint error, Accessed None, ensure or UObject/widget destruction diagnostic in those logs. The delayed-shutdown experiment explicitly observed PIE stopped, waited two seconds, then quit; its third run still crashed. **Waiting for PIE completion is not a demonstrated repair.** This experiment remains opt-in, and the production validator's default shutdown was not changed.
+
+The close-only reproducer executes no transient turntable spawn, in-memory dialogue fixture, Enhanced Input injection or customer exit. More decisively, `no-pie-startup-2` crashes after simply opening the production editor and calling quit: no PIE, project assertions, runtime customer/UI behavior, input injection or explicit Blueprint compilation. `no-pie-compile-1` also crashes without PIE. These controls rule out the isolated gameplay tests and their cleanup as necessary triggers. They do not establish which editor object retains the failing Slate tree.
+
+A content-free minimal project using matching D3D12/SM6 renderer settings exited 0 three times (`minimal-sm6-1/2/3`). This is a control, not proof that the fault is impossible in the minimal project. A default SM5 minimal-project attempt was explicitly stopped during cold shader compilation and replaced with the matching SM6 control.
+
+An early overlapping diagnostic run hit a separate PSO allocation error `8007000e` before testing (`isolate-selection`, exit 3). Two overlapping processes were deliberately stopped and are recorded in `aborted-overlap.json`; their exits were not retained by the stopped host and are not passing evidence. All affected scopes were rerun with only one rendered Unreal process at a time. The cook used NullRHI. No ensure, automation error or crash reporting switch was suppressed.
+
+## Native shutdown evidence
+
+A local Windows debug-event observer was tried both from process creation and by attaching only after the real Next assertion. The first five debugger observations exited normally; the third late-attach run (`late-debug-close-3`) captured **both first-chance and unhandled** `0xc0000005`, then the same process exit code. The access reads address zero at `ntdll.dll + 0x5fbb0`, after the Unreal log had closed.
+
+The recorded stack words were unwound using the installed DLLs' x64 `.pdata` / unwind metadata, stopping when no recorded return address remained. Export names were accepted only where the export coincides with the containing function start. This identifies the chain through:
+
+`LdrShutdownProcess -> CRT on-exit table -> Core static destruction -> Slate widget tree destruction -> SRichTextBlock::~SRichTextBlock -> FTextLayout::~FTextLayout -> Core text cleanup -> ucrtbase!_free_base -> ntdll!RtlFreeHeap -> native fault`.
+
+Evidence: `late-debug-close-3-debug.json`, `unwound-from-candidate-stack.json`, `late-debug-export-candidates.json`, and the corresponding log. Raw stack candidates are separately labeled; misleading nearest-export labels for private functions are **not** treated as symbolized frames. Installed full engine PDBs are unavailable. Earlier three crash dumps under `Saved/OvernightIntegration/Round1/User/Saved/Crashes` are the historical widget-construction GUID ensures, not this failure.
+
+A further independent native capture (`icu-shutdown-2-debug.json`) confirms the ICU free callback changes from nonzero while PIE is alive to **zero at the first-chance and unhandled exception**. For this installed Core DLL, the free-dispatcher callback is at RVA `0x1dd5f28`; initially it points to RVA `0x352d10`, whose machine code calls `FMemory::GetAllocSize` and `FMemory::Free`, matching `FICUOverrides::Free`. The dispatcher at RVA `0xbe9150` falls back to CRT free when that callback is zero. The second capture preserves full thread-context and stack bytes. A minidump write was attempted but returned `0x800703e6`; that partial file is not treated as a usable dump.
+
+Installed `Core/Private/Internationalization/ICUInternationalization.cpp:115` installs Unreal's memory callbacks and `:212` terminates ICU via `u_cleanup`. `ICUText.cpp:344` implements the text BiDi object and its ICU string; `Slate/Public/Framework/Text/TextLayout.h:762` stores that object. The captured late Slate text destructor reaches CRT `_free_base` after the callback reset. **The supported mechanism is a late Slate/ICU lifetime and allocator mismatch during editor DLL shutdown.** The original allocation and the object retaining the rich-text widget were not individually identified, so that ownership detail remains unresolved; private function names inferred from nearby exports are not claimed as exact symbols.
+
+The fault occurs after editor/PIE shutdown and during DLL static cleanup, not inside a Blueprint assertion or Python cleanup call. The editor-only reproducer requires no PIE or project tests. This supports the engine-runtime classification and does not justify altering production Blueprints or the working gameplay cleanup. No speculative cleanup or allocator workaround was promoted as a fix. The checkpoint still fails its normal rendered process gate.
+
+## Startup condition failures
+
+The 15 messages are engine Core smoke tests run at frame 0, before the project Python script or PIE. A fresh content-free project with no RecordShop assets reproduces all 15 and exits 0. Enabling `LogAutomationTest VeryVerbose` exposes the names:
+
+| Engine test | Failed conditions under current Korean localization |
+| --- | ---: |
+| `FUnifiedErrorTest_CreateErrorMessage` | 7 |
+| `FUnifiedErrorTest_CreateErrorMessageWithContext` | 4 |
+| `FStructuredLogFormatTest` | 4 |
+
+The same minimal-project control with command-line `-culture=en` runs those tests successfully with zero condition failures. This was a diagnostic comparison only: the validation launcher, project culture and normal diagnostics were not changed. `startup-comparison.json` records the original and English runs; the English helper reused the original result filename, so its process wrapper's `complete=false` means a missing per-name JSON, not an engine failure. Both logs contain the script-start marker after smoke tests and normal process exit.
+
+Installed engine source explains the behavior: `Core/Private/Misc/AutomationTest.cpp:531` automatically runs SmokeFilter tests and disables stack capture for startup; `Core/Public/Misc/LowLevelTestAdapter.h:130` emits the generic Condition failed text. `Core/Tests/Experimental/UnifiedError/UnifiedErrorTests.cpp:479` and `:512` compare localized messages to literal English strings. `Core/Tests/Logging/StructuredLogFormatTest.cpp:21` contains the formatting smoke test. These are genuine engine-test failures under this localization, not RecordShop assertion failures, and they are not suppressed or relabeled as globally clean diagnostics.
+
+## Production-map cook and dependencies
+
+Target: `/Game/RecordShop/Maps/Greybox/L_RecordShop_Greybox`.
+
+The initial default cook stalled trying to start Zen with an empty data directory; that attempt was deliberately stopped and retained as `cook-greybox`. The supported `-SkipZenStore` option selected the loose-file cooker without changing project settings. The second process completed: **exit 0, Success - 0 errors**, 593 packages cooked, seven skipped by platform, all 600 processed. Both configured Windows shader formats were retained. Global shader compilation took most of the run; the host watchdog was extended while packages were making progress rather than terminating a progressing cook.
+
+Cooked map artifacts exist at `Saved/CheckpointCrashRepair/Cooked/RecordShop/Content/RecordShop/Maps/Greybox/L_RecordShop_Greybox.umap` (20,439 bytes) and `.uexp` (20,559 bytes). Exact arguments, full log and final process result are `cook-greybox-loose-command.json`, `cook-greybox-loose.log` and `cook-greybox-loose-process.json`.
+
+No missing package/dependency, Blueprint cook error, redirector/reference failure or deterministic-cooking warning was found in that completed log. Ambient warnings include trace-server startup and certificate-store access. Cook's unique warning summary contains certificate access and an AsyncIoDelete output-cleanup warning; shutdown adds cleanup warnings for the generated output directories. The earlier Zen attempt left `ue.projectstore` in the shared temporary output root. These are retained, not suppressed. The cook-generated `Build/Windows/FileOpenOrder/CookerOpenOrder.log` was moved into the ignored evidence directory, preserving it without adding generated Build content to the dirty checkpoint. This is a successful current-map cook smoke check, not a release package, launch test or proof of repeated-cook determinism.
+
+A separate read-only registry/load commandlet (`dependencies.json`, exit 0) traversed 166 packages, including 86 `/Game` packages. It found no missing packages or redirectors and compiled all ten Blueprint assets in that map's package-reference closure. This closure does not substitute for all config-driven or future contributor dependencies. The actual cook provides the broader current-target validation. Unavailable, not-yet-integrated contributor binaries remain unverified.
+
+## Changes, preservation and reproduction
+
+This crash-investigation round changes only:
+
+- `Scripts/Unreal/isolate_checkpoint_shutdown.py` (new): serial scope isolation, fresh evidence names, explicit process exit gate, expected assertion/compile counts, editor-only controls and optional PIE-stop experiment. It generates reviewable copies of the existing checks, retaining their assertions and prerequisites. It neither saves assets nor changes the canonical validator's default behavior.
+- `Docs/OVERNIGHT_INTEGRATION_2026-10-09.md` (this current safety addendum).
+- `Docs/OVERNIGHT_INTEGRATION_2026-10-10.md` (supersession banner and corrected remaining-work conclusion).
+
+The inherited four dialogue integration assets and original validation/installer scripts remain intact. SHA-256 comparison of all 399 Content/Config/project files against this task's starting worktree found no changes. HEAD and index timestamp remained unchanged. No reset, discard, stash, merge, commit, push, pull, fetch, staging or Git metadata write was performed. Test fixtures, logs, generated scripts and cook artifacts stayed outside production content in ignored evidence/cache locations.
+
+Reproduction from the repository root, using host Python:
+
+```powershell
+python Scripts/Unreal/isolate_checkpoint_shutdown.py natural close dialogue selection turntable physical keyboard exit all
+python Scripts/Unreal/isolate_checkpoint_shutdown.py all --nullrhi
+python Scripts/Unreal/isolate_checkpoint_shutdown.py close --staged-shutdown
+python Scripts/Unreal/isolate_checkpoint_shutdown.py editor-startup preflight
+```
+
+Run these serially. A nonzero Unreal exit always fails the diagnostic command, regardless of completed JSON. Normal startup smoke errors remain visible and explicitly counted. `reviewable-tool-check.json` verifies the new runner returns 0 for the complete NullRHI suite and 1 for the complete-but-crashed D3D12 suite. The fresh dialogue screenshot was inspected and shows one blank panel with Next, consistent with the authored row.
+
+The complete dirty checkpoint still consists of these 12 files (11 inherited plus the new isolation tool):
+
+- `Content/RecordShop/Core/Flow/BP_GameFlowManager.uasset`
+- `Content/RecordShop/Interaction/Actors/BP_RecordShelf.uasset`
+- `Content/RecordShop/Interaction/Actors/BP_Turntable.uasset`
+- `Content/RecordShop/UI/Dialogue/WBP_Dialogue.uasset`
+- `Scripts/Unreal/Invoke-IntegrationPython.ps1`
+- `Scripts/Unreal/validate_integration_round.py`
+- `Scripts/Unreal/dialogue_handoff_checks.py`
+- `Scripts/Unreal/integrate_dialogue_handoff.py`
+- `Scripts/Unreal/resave_dialogue_integration.py`
+- `Scripts/Unreal/isolate_checkpoint_shutdown.py`
+- `Docs/OVERNIGHT_INTEGRATION_2026-10-09.md`
+- `Docs/OVERNIGHT_INTEGRATION_2026-10-10.md`
+
+## Historical report below — not the current safety verdict
+
+The following pre-dialogue history is retained for provenance. Its old HEAD, feature gaps and validation verdicts describe earlier work only.
+
+# Overnight Integration - 2026-10-09
 
 ## Current checkpoint and validation scope
 
