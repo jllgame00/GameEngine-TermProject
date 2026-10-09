@@ -14,6 +14,12 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+# Use BOM-free UTF-8 for console text and prompts piped to native commands.
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[Console]::InputEncoding = $utf8NoBom
+[Console]::OutputEncoding = $utf8NoBom
+$OutputEncoding = $utf8NoBom
+
 function Write-Step([string]$Message) {
     Write-Host ""
     Write-Host "=== $Message ===" -ForegroundColor Cyan
@@ -204,7 +210,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
     $workerOut = Join-Path $runRoot "round-$round-worker.txt"
     $auditOut = Join-Path $runRoot "round-$round-audit.json"
 
-    $workerBase = Get-Content $workerPromptPath -Raw
+    $workerBase = Get-Content $workerPromptPath -Raw -Encoding UTF8
     $headsJson = $knownHeads | ConvertTo-Json -Depth 4
     $dynamic = @"
 
@@ -251,7 +257,7 @@ IMPORTANT HARNESS CONTRACT:
         Write-Host "Worker produced no repository changes."
         if (Test-Path $workerOut) {
             Write-Host "--- Worker last message ---"
-            Get-Content $workerOut
+            Get-Content $workerOut -Encoding UTF8
         }
         break
     }
@@ -275,8 +281,8 @@ IMPORTANT HARNESS CONTRACT:
     $statusText = Get-GitText @("status","--short")
 
     Write-Step "Round $round - independent auditor"
-    $auditBase = Get-Content $auditPromptPath -Raw
-    $workerLast = if (Test-Path $workerOut) { Get-Content $workerOut -Raw } else { "" }
+    $auditBase = Get-Content $auditPromptPath -Raw -Encoding UTF8
+    $workerLast = if (Test-Path $workerOut) { Get-Content $workerOut -Raw -Encoding UTF8 } else { "" }
 
     $auditDynamic = @"
 
@@ -321,8 +327,8 @@ Return JSON matching the supplied schema.
         exit 22
     }
 
-    try { $audit = Get-Content $auditOut -Raw | ConvertFrom-Json }
-    catch { Write-Host "Could not parse auditor JSON. No commit/push." -ForegroundColor Red; Get-Content $auditOut; exit 23 }
+    try { $audit = Get-Content $auditOut -Raw -Encoding UTF8 | ConvertFrom-Json }
+    catch { Write-Host "Could not parse auditor JSON. No commit/push." -ForegroundColor Red; Get-Content $auditOut -Encoding UTF8; exit 23 }
 
     Write-Host "AUDIT VERDICT: $($audit.verdict)"
     Write-Host "SAFE TO COMMIT: $($audit.safe_to_commit)"

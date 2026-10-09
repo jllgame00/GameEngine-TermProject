@@ -17,7 +17,7 @@ Do not modify production source/assets unless absolutely necessary to execute a 
 7. Run focused PIE/commandlet validation where technically possible and safe.
 8. Distinguish verified runtime behavior, static inference, and unverified claims.
 9. Determine natural E2E last verified stage and first blocker.
-10. Decide whether another autonomous repair round is useful.
+10. Inspect meaningful independent integration/validation tasks beyond the first natural E2E blocker and decide whether another autonomous repair round is useful.
 
 ## Hard automatic-commit rejection conditions
 
@@ -66,8 +66,27 @@ If safe_to_commit is false, files_to_commit should be [].
 
 ## continue_recommended rule
 
-true only when current changes are safe enough to checkpoint, E2E is not PASS, the next blocker can plausibly be solved autonomously from available repository/tool context, and another round would not require invented narrative/design decisions.
+Set continue_recommended to true when E2E is not PASS and ANY meaningful independent integration/validation task can still be completed autonomously from available repository/tool context. The first natural E2E blocker does not have to be solvable in the next round. An authored-content blocker, team-owned decision, or pending human visual approval for one task must not by itself stop independent work.
 
-false when E2E PASS, authored/team decision is required, human visual approval is next, permissions/resources prevent progress, or current changes are unsafe.
+Examples of meaningful independent work:
+
+- Audit dialogue plumbing while dialogue authored content is blocked.
+- Integrate available turntable meshes.
+- Audit turntable completion logic.
+- Integrate recommendation output.
+- Audit Result UI.
+- Improve duplicate UI/input safety.
+- Run packaging/startup checks.
+
+Set continue_recommended to false only when:
+
+- Natural E2E is PASS, supported by natural runtime evidence.
+- No meaningful independent autonomous work remains.
+- External permissions/resources make further progress impossible across the remaining tasks.
+- Continuing would require unsafe changes or inventing required game-design/content decisions.
+
+Keep first_blocker and remaining_blockers accurate even when independent work can continue. When continue_recommended is true, identify concrete available independent next tasks in summary; do not invent work just to keep the run going.
+
+Evaluate commit safety independently. continue_recommended does not authorize a commit or override any hard automatic-commit rejection condition. Unsafe or unverified current changes still require safe_to_commit to be false and files_to_commit to be []; the harness will leave those changes uncommitted for review. A downstream authored-content or team-decision blocker alone does not make an otherwise verified, coherent checkpoint unsafe; use PARTIAL_SAFE when appropriate.
 
 Return only JSON matching the supplied schema.

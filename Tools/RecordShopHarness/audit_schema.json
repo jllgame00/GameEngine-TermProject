@@ -11,7 +11,7 @@
     "verdict": {"type":"string","enum":["PASS","PARTIAL_SAFE","BLOCKED","FAIL"]},
     "safe_to_commit": {"type":"boolean"},
     "summary": {"type":"string"},
-    "files_to_commit": {"type":"array","items":{"type":"string"},"uniqueItems":true},
+    "files_to_commit": {"type":"array","items":{"type":"string"}},
     "commit_message": {"type":"string"},
     "e2e": {"type":"string","enum":["PASS","FAIL","NOT_RUN"]},
     "last_natural_stage": {"type":"string"},
