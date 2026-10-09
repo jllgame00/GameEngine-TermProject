@@ -1,213 +1,135 @@
-# Overnight Integration — 2026-10-09
+# Overnight Integration - 2026-10-09
 
-## Baseline
+## Current round and terminal verdict
 
-- Repository: jllgame00/GameEngine-TermProject.
-- Worktree: D:/univ/3-1/GameEngine/Termproject/RecordShop_overnight.
-- Branch: feature/overnight-integration-2026-10-09, already checked out at start; initially clean.
-- Base develop and initial HEAD: aa1b9a440d1cd21205c34bf79e0027596cc21cc6.
-- Engine verified from installed Build.version: Unreal 5.8.2, changelist 56702186.
-- Production ownership remains WBP_RecordSelect -> BP_RecordShelf.RecordSelected -> BP_GameFlowManager.HandleRecordSelected -> BP_Turntable.SetRecord / CurrentRecord.
-- Root CustomerData, DialogueData, CustomerDialogue and DialogueManager remain authoritative. No GameInstance architecture restored.
-- No contributor branches merged, no production map replaced, no PR opened or merged.
+This report supersedes the earlier pre-harness report on this branch. Findings below distinguish this round's fresh evidence from inherited changes.
 
-Fetch was attempted for origin and hyeon-fork. Both failed because this worktree's Git metadata points outside the writable workspace, at D:/univ/3-1/GameEngine/Termproject/RecordShop/.git/worktrees/RecordShop_overnight/FETCH_HEAD: Permission denied. Git ls-remote also failed to connect to GitHub over port 443. The connected GitHub API independently confirmed develop and all supplied contributor HEADs; local objects match those HEADs. Therefore the inventory is current at API check time despite unsuccessful Git fetch.
+- Repository: `jllgame00/GameEngine-TermProject`.
+- Worktree: `D:/univ/3-1/GameEngine/Termproject/RecordShop_overnight`.
+- Branch: `feature/overnight-integration-2026-10-09`.
+- Round: 1 / 3.
+- Start/current HEAD: `3788f1f102c8fd2f1b9f2d18f926dd0d6b171231` (unchanged).
+- Engine: installed Unreal **5.8.2**, CL 56702186, verified from Build.version and actual editor logs.
+- Worktree started clean. No commit, push, staging, merge, reset, or develop modification was performed.
+- **E2E: FAIL / BLOCKED.** Independent modal repairs are implemented and runtime verified. The vertical slice remains incomplete.
+- **LAST NATURALLY VERIFIED STAGE:** Start -> customer spawn -> entry/seat route -> CustomerReadyForDialogue -> GameFlow Dialogue.
+- **FIRST BLOCKER:** the readiness handler does not call DialogueManager.StartDialogue; there is no integrated dialogue UI/Next/finish path.
+- **Terminal conditions: D and B.** Contributor binaries cannot be obtained with available credentials/network; current dialogue content and live-customer/request semantics also remain unavailable or unspecified. Another identical unattended round cannot resolve those dependencies. A round with hydrated assets and agreed data contracts would be useful.
 
-## New Contributor Work Found
+## Production changes in this round
 
-| Area | Previously audited/integrated contributor state | Confirmed latest HEAD | New authored work |
-| --- | --- | --- | --- |
-| Environment | d28b4fa | 9927497acf49c433034bdf520d3ad5c6a20398ee | FOUND: 6077ace and 9927497 |
-| Turntable | 52bcddd | 2edde0dc4b4ac7fcb5a58319b481de8a429e0620 | FOUND: 2edde0d |
-| UI fork | 12f24b8 | f5a66494ca7de7edcb50b3fadfa1038015ca336d | FOUND: 34c7166, c8df72d, f5a6649 |
-| Customer AI | c07f5f43 | 8b473cd8e2c0e4a3a6ae6cb9176a98720d6892b0 | NONE: develop merge only |
-| Dialogue | df6774f5faf274eb83b57600aa347bb3605121f6 | Same | NONE |
+| File | Change |
+| --- | --- |
+| `Content/RecordShop/Interaction/Actors/BP_RecordShelf.uasset` | Before CreateWidget, query top-level WBP_RecordSelect and WBP_Turntable instances; proceed only when both arrays are empty. This guards re-entry across different shelves as well as different modal types. |
+| `Content/RecordShop/Interaction/Actors/BP_Turntable.uasset` | Same local modal guard; supply the existing player controller to the widget's OwningPlayer pin. Gameplay step/data/audio graphs are preserved. |
+| `Content/RecordShop/UI/RecordSelection/WBP_RecordSelect.uasset` | Make the widget focusable; Escape removes it, hides the cursor, flushes input into GameOnly and restores viewport focus. Other keys return Unhandled. All three existing LP choices now also flush input and restore viewport focus after their existing close behavior. |
+| `Content/RecordShop/UI/Turntable/WBP_Turntable.uasset` | Make the widget focusable and add the same Escape close/input-restoration path. |
+| `Content/RecordShop/Core/Flow/BP_GameFlowManager.uasset` | Append CloseRecordShopInteractionModals to the existing CustomerExited cleanup. It removes only the two current production interaction widget classes, and restores game input/cursor only when it removed an open modal. Existing ActiveCustomer=None and Explore transition remain intact. |
+| `Scripts/Unreal/Invoke-IntegrationPython.ps1` | Workspace-local Unreal Python runner, commandlet or offscreen editor mode; optional rendered mode. Uses local DDC/user/log paths and hidden process launch. |
+| `Scripts/Unreal/validate_integration_round.py` | Reproducible read-only asset compilation and isolated PIE regression checks; separately records the initial natural-flow observation. Saves no map or asset. |
+| `Docs/OVERNIGHT_INTEGRATION_2026-10-09.md` | Current evidence, decisions, limits and terminal summary. |
 
-Environment commits:
-- 6077aceec06c8a1e223f2955cd00c0f4ac948359: separate turntable components and listening-bar placement.
-- 9927497acf49c433034bdf520d3ad5c6a20398ee: canonical turntable asset paths.
+All five modified Blueprints were compiled before saving and reloaded/compiled in fresh PIE. All binary mutations used Unreal Editor Python graph/property/save APIs. No binary patch, raw asset move/rename, or filesystem asset replacement was used. No persistent widget reference was introduced: viewport membership determines whether an interaction modal is open.
 
-UI commits:
-- 34c716624560ac6ac1413d2373bdb465476be2f3: update old WBP_RecordSelection.
-- c8df72d1a473406c8b2865e019e722304972833d: create WBP_RecordSelection2.
-- f5a66494ca7de7edcb50b3fadfa1038015ca336d: UI prototype.
+Startup-map configuration and the original ActiveCustomer/Explore cleanup were already committed before this round. Config/DefaultEngine.ini is unchanged in this round. The production Greybox map is unchanged.
 
-Customer audit excluded commits already in develop: no non-merge customer-specific commit remains after c07f5f43. Its tree differs from develop only by the private L_CustomerAI_Test map and a development-directory .gitkeep deletion. All four authoritative dialogue root assets are byte-identical at the Git/LFS-pointer level to the dialogue branch.
+## Validation verdicts
 
-## Environment Integration
+All seven isolated assertion groups pass in the final completed run (Unreal exit code 0). Final evidence: `Saved/OvernightIntegration/Round1/runtime.json` and `runtime.log` (ignored local outputs). The run observes natural flow for 15 seconds before any downstream test invocation. It then exercises real Blueprint interactions, button delegates and Slate key routing in a real UEDPIE world. The final observation occurs at 45 seconds.
 
-**BLOCKED; no new environment assets imported.**
-
-[PR #9](https://github.com/jllgame00/GameEngine-TermProject/pull/9) was read through the GitHub connector. It is open and unmerged, based on aa1b9a4, with head 9927497. The authored delta since d28b4fa is 77 files: 22 non-map assets, L_Env_Test, and 54 generated test-map packages.
-
-The four intended reusable assets remain:
-- Content/RecordShop/Art/Environment/ListeningBar/Turntable/SM_Turntable_Base.uasset
-- Content/RecordShop/Art/Environment/ListeningBar/Turntable/SM_Turntable_Lid.uasset
-- Content/RecordShop/Art/Environment/ListeningBar/Turntable/SM_Turntable_Record.uasset
-- Content/RecordShop/Art/Environment/ListeningBar/Turntable/SM_Turntable_Tonearm.uasset
-
-PR-reported pivots: Base floor center; Record center/Z rotation; Tonearm pillar/Z rotation; Lid rear lower hinge/local X rotation. These are contributor reports, NOT engine-verified measurements. PR reports M_Glass on the lid and placement at (80,400,105) in L_Env_Test. That placement was not applied to the production actor.
-
-None of the 22 new non-map environment LFS objects exists in the shared local LFS cache. Targeted hydration to Saved/OvernightIntegration/LFS failed: origin Git Credential Manager could not persist credentials and Git could not read a username without a terminal. Fork LFS access independently failed with a forbidden outbound socket on GitHub port 443. No unresolved pointers were copied into Content.
-
-Mesh dependencies, material slots, scale, collision, pivots and motion cannot be certified without the binaries. M_Glass plus its three added textures are candidates, not a proven complete dependency closure. No generated package was imported to satisfy an unverified dependency.
-
-Bar stool provenance recorded from PR: Fab “3D Bar Stool model”, Gamefruit, Fab Standard License. Stool and speaker assets were omitted because their dependency closure and reusable canonical mesh references could not be inspected. No license/source files were discarded or moved.
-
-## Turntable / Recommendation Integration
-
-**BLOCKED for new contributor behavior; current production logic preserved.**
-
-The entire new contributor commit changes exactly five assets. ST_RecordData itself has no delta against develop.
-
-| Asset | Decision | Evidence / limitation |
+| Gate / area | Verdict | Fresh evidence and boundary |
 | --- | --- | --- |
-| BP_RecordGameInstance | OMIT_STALE | Forbidden ownership architecture; not imported |
-| ST_CustomerRequest | BLOCKED_BY_SHARED_CONTRACT | New pointer found, binary unavailable; field compatibility and authored vocabulary unverified |
-| BP_Turntable | PORT_LOGIC_ONLY, blocked | Production actor must retain SetRecord and CurrentRecord; contributor binary unavailable |
-| WBP_RecordSelect | PORT_LOGIC_ONLY, blocked | Preserve production ST_RecordData dispatcher; no wholesale replacement |
-| WBP_Turntable | PORT_LOGIC_ONLY, blocked | Potential presentation/step improvements require actual graph inspection |
+| Startup | VERIFIED PASS for editor/PIE | Initial editor world and UEDPIE world are L_RecordShop_Greybox. Packaged startup is unverified. |
+| A. Customer | VERIFIED PASS for current integrated route | Natural spawn/movement reached Dialogue through the existing readiness handler at about 2 seconds; remained there through the 15-second natural observation. New contributor polish is not imported. |
+| B. Dialogue | PARTIAL scaffold; FAIL handoff | Root assets load; DialogueManager compiles. No ready -> StartDialogue call, integrated UI, Next, finish or dialogue input ownership is present. |
+| C. Record selection | VERIFIED PASS in isolated PIE | Three interactions across two shelves create one widget; attempting the turntable while it is open creates no competing widget. Each real BTN_LP01/02/03 OnClicked delegate delivers Test_record_01/02/03 to BP_Turntable.CurrentRecord, sets HasRecord, closes the widget and hides the cursor. Physical line-trace interaction is unverified. |
+| Interaction modal safety | VERIFIED PASS in isolated PIE | Repeated turntable interaction creates one widget and blocks both shelves. Escape is handled and closes/reopens each UI twice; F10 leaves it open. Zero widgets and cursor=false follow close. Runtime viewport logs show input capture restored. No new stale widget reference is stored. |
+| D. Turntable | PARTIAL | Invalid step-zero PlaceRecord/PlayRecord/MoveTonearm calls are rejected. Valid order reaches 0 -> 1 -> 2 -> 3 -> 4 -> 5 at RPM 33; repeated PlayRecord stays at 5. A fresh transient turntable with HasRecord=false also rejects PlayRecord at step 4 (stays at 4). Audio=None uses the existing placeholder branch, so audible playback and actual playback completion are unverified. |
+| E. Recommendation | UNVERIFIED / BLOCKED | No inspected current TurntableCompleted/RecommendationResult contract; newest contributor request/turntable binaries are unavailable. No scoring rules invented. |
+| F. Result / exit | PARTIAL overall; VERIFIED PASS isolated exit/cleanup | Explicit diagnostic FinishResult invokes the real customer exit route. CustomerExited clears ActiveCustomer, restores Explore, removes the open turntable widget and hides the cursor. Separate repeated HandleCustomerExited calls remove an open selection widget and remain stable. Result UI and the natural recommendation -> result transition are absent. |
+| G. Natural E2E | FAIL / BLOCKED | Stops at Dialogue before StartDialogue. Later injected calls are isolated regression evidence only. Debug_RunDummyFlow is never used. |
+| Real meshes | UNVERIFIED / BLOCKED | Four canonical LFS binaries absent; transforms, dependencies, pivots and motion cannot be inspected. |
+| Packaging | UNVERIFIED / deliberately omitted | Vertical slice does not pass; no packaged smoke-test claim. |
 
-The five newest LFS binaries are absent locally. Reported Good/Bad scoring, RecommendationResult and TurntableCompleted were not assumed valid or recreated from commit messages. No scoring vocabulary, threshold or narrative text was invented.
+Runtime used NullRHI, offscreen Slate and no sound. This verifies Blueprint execution, widget counts, Slate key handling, cursor/input capture and lifecycle callbacks, not visual layout, mesh appearance or audible playback. Engine startup automation-condition and blocked EOS/network warnings exist; this is not a claim of a globally clean engine log.
 
-Direct production graph inspection confirms CurrentRecord.Audio -> validity guard -> PlaySound2D. PlayRecord checks step 4 and advances to 5, including an explicitly labeled no-audio placeholder branch. These are existing baseline behaviors, not newly ported changes. No TurntableCompleted dispatcher or RecommendationResult member exists in the inspected production actor. No completion event was added at audio start and misrepresented as playback completion.
+### Regression and structural checks
 
-## UI Integration
+Seven Blueprints freshly compile: DialogueManager, GameFlowManager, RecordShelf, Turntable, RecordSelect, Turntable UI and Customer. Root structs/table load. The natural customer route, LP forwarding, step order and exit consumer remain covered after the changes.
 
-**BLOCKED for contributor UI and modal repairs; no new UI saved.**
+Fresh before/after graph exports confirm that existing gameplay/data pins are unchanged except the intended interaction entry/owning-player pins, selection close/input pins, and the single execution link appended after the existing exit cleanup. New graphs are OnKeyDown on the two widgets and CloseRecordShopInteractionModals on GameFlow. DialogueManager and Customer graphs have no changes. See `graphs.json`, `graphs-final.json` and `graph-delta.json` under the round evidence directory.
 
-All four latest UI LFS pointers were inventoried, including the newly changed old WBP_RecordSelection. A targeted fork LFS fetch failed with the socket-access error above. Widget trees, dispatchers, close behavior and dependencies of the newest fork assets could not be inspected or compiled. No claim is made that the latest fork reproduces the older audit's exact implementation.
+The authoritative path remains:
 
-- WBP_Dialogue: deferred until hydrated and inspected; target /Game/RecordShop/UI/Dialogue/.
-- WDP_SelectionResult: deferred until hydrated and RecommendationResult is defined; target /Game/RecordShop/UI/Result/.
-- WBP_RecordSelection2: intentionally not adopted; no evidence establishes compatibility or value over authoritative WBP_RecordSelect.
-- Latest old WBP_RecordSelection: not adopted; prior rejection stands absent fresh direct contrary evidence.
+`WBP_RecordSelect -> BP_RecordShelf.RecordSelected -> BP_GameFlowManager.HandleRecordSelected -> BP_Turntable.SetRecord / CurrentRecord / HasRecord`.
 
-No binary filesystem rename/move was used for any Unreal asset. No second production selection system or ThirdPerson UI was imported.
+### Failures diagnosed during this round
 
-Production graph audit found unguarded CreateWidget calls in both shelf and turntable Interact paths. WBP_RecordSelect removes itself, hides the cursor and sets GameOnly after each LP choice. WBP_Turntable has no close path in its current event graph.
+- The previous Length/equality-based guard experiment hung during compilation. Replacing that comparison with the native Array_IsEmpty function compiled and saved successfully. Failed experiments did not save partial assets; only the successfully compiled replacements are included.
+- An initial Escape literal used struct-style text. Unreal FKey uses custom text serialization, so that literal became `(`. The binding was corrected to `Escape`.
+- A normal save returned success without persisting the pin-only edit because the package was not dirty. The correction now explicitly marks the Blueprint modified and forces its editor save. A fresh reload checks the persisted literal before PIE; Slate Escape tests then pass.
+- Early keyboard diagnostics sent input before a Slate frame and edited a transient component through editor property notifications. The final test uses separate ticks and runtime component methods. Earlier failed JSON/logs are retained as diagnostic history, not counted as passes.
+- An added no-record regression initially attempted an unavailable Python wrapper for deferred spawning; its final form uses the reflected engine functions. This was a harness API issue, not a production gameplay failure.
 
-A minimal editor-only experiment attempted viewport-based guards for the two existing modals plus Escape dismissal. Unreal exited with code 3 / EXCEPTION_ACCESS_VIOLATION during BP_RecordShelf compilation before the save phase. The experiment was abandoned. All four affected asset files were compared to their pre-experiment bytes and are unchanged. No partial modal edit is included. The ignored modals.py is a failed diagnostic experiment, not an approved migration script.
+## Latest fetched contributor audit
 
-## Dialogue Flow Integration
+Refs were resolved by name from the current local remote-tracking refs, not hardcoded for selection. They match the harness-provided latest fetch. No additional successful online fetch is claimed.
 
-**BLOCKED; handoff remains absent.**
-
-Fresh engine inspection confirms DialogueManager is an ActorComponent, not an Actor. GameFlow currently has no DialogueManager component/reference. BP_Customer exposes movement targets and lifecycle dispatchers but no agreed CustomerData-to-active-customer bridge.
-
-CustomerDialogue exports one row, NewRow: DialogueID=None, Speaker empty, Text empty, Mood empty, MusicPreference empty, IsEndNode=false. StartDialogue clears/fills DialogueList using CurrentMood and calls ShowNextLine; ShowNextLine broadcasts OnUpdateDialogueUI and later OnDialogueFinished. The data scaffold compiles, but meaningful dialogue is absent.
-
-The natural readiness handler currently only sets Dialogue state. No start call, UI binding, Next handler or finish/close integration was added: the contributor widget is unavailable and mapping an active customer into the authored data contract is unresolved. Starting the blank row without a usable Next/close path would not safely resolve the blocker. The root scaffold/data were left intact.
-
-## Customer Lifecycle Integration
-
-**Integrated locally and verified in isolation; full cycle PARTIAL.**
-
-Changed only the existing BP_GameFlowManager.HandleCustomerExited consumer:
-1. Clear ActiveCustomer to None.
-2. Call existing SetGameFlowState with Explore (NewEnumerator0).
-
-The event was already bound to the spawned customer's CustomerExited dispatcher. Its execution output was previously disconnected. No spawn, movement, FinishResult or ResultFinished wiring was replaced. No queue/day system was added.
-
-The saved Blueprint compiled successfully, including a fresh reload in PIE. After the natural-flow observation ended, a separately labeled diagnostic called FinishResult. The real customer exit path then emitted CustomerExited; ActiveCustomer became None and GameFlow became Explore. One BP_Customer actor remains in the level after exiting, consistent with the existing actor-lifetime behavior; it was not destroyed by this change. Stale-modal cleanup remains unresolved.
-
-## Startup Map
-
-**PASS for config and PIE startup.**
-
-Both EditorStartupMap and GameDefaultMap now reference /Game/RecordShop/Maps/Greybox/L_RecordShop_Greybox.L_RecordShop_Greybox in Config/DefaultEngine.ini. The asset exists and loads. A new editor session reported this exact startup world before the test explicitly loaded the level, and PIE used its UEDPIE_0 copy. GameMode and the production map asset were not changed. Packaged-build startup was not tested.
-
-## Runtime Validation
-
-Validation used installed Unreal 5.8.2 with commandlet compilation and real PIE requested through LevelEditorSubsystem.editor_request_begin_play. PIE world and is_in_play_in_editor=True were recorded. Runs used NullRHI / no sound / offscreen execution: rendered UI, mesh appearance and audible playback were not certified.
-
-- Seven baseline Blueprints compiled: DialogueManager, BP_GameFlowManager, BP_RecordShelf, BP_Turntable, WBP_RecordSelect, WBP_Turntable and BP_Customer. The root structs/table loaded.
-- Modified GameFlow compiled after save and on reload.
-- Initial editor startup hit an unwritable Zen/DDC configuration. A supported command-line workspace-local filesystem cache and DDC-ForceMemoryCache allowed validation without a production config change.
-- Initial asynchronous PIE launch exited before observation; using the documented EditorPythonScripting keep-alive API completed the run.
-- Engine logs include startup LogAutomationTest “Condition failed” messages and blocked EOS/network requests. This report does not claim an entirely warning/error-free engine log.
-
-| Test | Result | Evidence and limits |
+| Ref | Resolved HEAD | Decision |
 | --- | --- | --- |
-| A. Customer start -> ready | PASS | Fresh PIE spawned the customer and reached Dialogue through the existing readiness delegate at about 2 seconds |
-| B. Dialogue -> Next -> finish | BLOCKED | No StartDialogue handoff or integrated UI; blank authored row |
-| C. Each LP forwarding | PARTIAL | All three real button OnClicked delegates produced Test_record_01/02/03 in CurrentRecord, HasRecord=true, zero remaining selection widgets and cursor=false; duplicate-open test failed |
-| D. Turntable | PARTIAL | Isolated calls rejected PlaceRecord/PlayRecord/MoveTonearm at step 0; valid order advanced 0->1->2->3->4->5 at RPM 33; a repeated PlayRecord stayed at 5. Without a selected record, PlayRecord stayed at 4. Both widget duplication and missing completion output remain |
-| E. Recommendation | BLOCKED | No inspected current request/scoring/result contract |
-| F. Result / exit | PARTIAL | Explicit diagnostic FinishResult -> real exit callback -> ActiveCustomer=None and Explore passed; no natural result transition and no modal cleanup implemented |
-| G. Full natural cycle | FAIL | Stops at Dialogue before DialogueManager.StartDialogue |
+| origin/develop | aa1b9a440d1cd21205c34bf79e0027596cc21cc6 | Baseline only; unchanged. |
+| origin/feature/environment-art | 9927497acf49c433034bdf520d3ad5c6a20398ee | Canonical four turntable meshes identified; binaries absent. No wholesale merge. |
+| origin/feature/turntable-recommendation | 2edde0dc4b4ac7fcb5a58319b481de8a429e0620 | Request/turntable/UI candidates still require hydration and graph inspection; GameInstance-authoritative work excluded. |
+| hyeon-fork/feature/ui-presentation | f5a66494ca7de7edcb50b3fadfa1038015ca336d | WBP_Dialogue and WDP_SelectionResult unavailable. Neither alternative record-selection family imported. |
+| origin/feature/customer-ai | 9e7d6a7901862a125dcf59e5603ff243fa61abb4 | **New genuine commit** after the previous 8b473cd develop merge: customer movement/test-flow polish. Changes BP_Customer and a private test map; newest customer binary absent. Current working route preserved. |
+| origin/feature/dialogue-data | df6774f5faf274eb83b57600aa347bb3605121f6 | Four root assets match HEAD at the Git/LFS-pointer level; no newer authored dialogue found. |
 
-Duplicate regression reproduced in real PIE: three shelf interactions across two shelves created three selection widgets; two turntable interactions created two turntable widgets. Test widgets were directly removed only after measurement to isolate later tests. This cleanup is test harness behavior, not a production fix.
+The old report's statement that the latest customer branch contained only a merge is obsolete. This round explicitly detects 9e7d6a7. Earlier contributor commits already represented in the integrated route are not re-imported merely because squash/cherry-pick history differs.
 
-All three selected records have Audio=None and Cover=None. The no-audio placeholder branch advanced to step 5; no audible playback or playback-finished event was demonstrated. Synthetic function/button invocation is labeled isolated and does not establish line-trace interaction, rendered appearance or natural E2E success.
+Fresh cache inventory verifies absence of the four canonical turntable mesh objects, ST_CustomerRequest, newest BP_Turntable, dialogue/result widgets and newest BP_Customer in both the shared cache and workspace-local LFS cache. Previous candidate inventory also confirms unavailable contributor selection/turntable UI binaries.
 
-The final saved GameFlow was reloaded and compiled again. Structural comparison against the pre-change graph found exactly one changed existing pin: HandleCustomerExited.then. Exactly two executable nodes were added: Set ActiveCustomer (None) and SetGameFlowState (Explore). Every other original graph node, default and pin link matched, including record forwarding and customer spawn/ready/result bindings.
+Targeted LFS retries in this round:
 
-Local evidence, intentionally ignored/untracked under Saved/OvernightIntegration: inventory.json, baseline.json, graphs.json, cleanup.json, pie.json, interaction-diagnostics.json, selection-diagnostics.json, flow-final.json and their logs. Diagnostic Python scripts and binary backups are also under Saved and must not be staged. No map was saved by these tests.
+- Origin canonical turntable assets: failed with missing Git credentials / terminal prompts disabled.
+- Fork dialogue/result widgets: failed connecting through the configured proxy at 127.0.0.1:9 (connection refused).
 
-## End-to-End Result
+No credentials, proxy configuration or security settings were changed. No unresolved LFS pointer was written into Content. The missing binaries prevent supported editor inspection/migration; requests/result tags and mesh dependencies cannot be inferred from commit messages.
 
-**E2E: FAIL.**
+## Dialogue/content and remaining blockers
 
-LAST NATURALLY VERIFIED STAGE: Customer spawn -> entry/seat movement -> CustomerReadyForDialogue -> GameFlow Dialogue.
+Fresh Unreal export of CustomerDialogue contains exactly one row, NewRow:
 
-Natural PIE entered Dialogue at approximately 2 seconds and remained there through the 25-second observation. No downstream calls were injected during that interval.
+- DialogueID=None;
+- Speaker, Text, Mood and MusicPreference empty;
+- IsEndNode=false.
 
-FIRST BLOCKER: CustomerReadyForDialogue -> DialogueManager.StartDialogue is not connected. Usable dialogue UI and authored dialogue/customer mapping are also missing.
+DialogueManager is an ActorComponent. StartDialogue clears/builds its list from CurrentMood, calls ShowNextLine and broadcasts the existing update/finished dispatchers. GameFlow currently has neither a DialogueManager component/reference nor a usable dialogue widget. The live-customer -> CustomerData/CurrentMood mapping remains unspecified. No narrative or customer metadata was invented to turn this into a synthetic pass. The absent contributor dialogue widget could not be safely migrated; an unsaved widget-authoring probe also found no exposed WidgetTree editing path in the available Python API. No replacement UI prototype is included.
 
-The later explicit FinishResult invocation tests the exit consumer only. Reflected shelf/button/turntable diagnostics also remain isolated tests. Neither counts as a natural dialogue/recommendation/result cycle. Debug_RunDummyFlow was never used.
+The next useful production work requires hydrated dialogue/result UI and recommendation/request assets, plus authored dialogue/customer mapping and request/tag semantics. Mesh integration additionally requires actual assets and dependency/pivot inspection. Existing test records all have Audio=None and Cover=None; their placeholder data is preserved.
 
-## Included Assets
+Modal safety currently covers the two production interaction UIs. Dialogue and Result have no integrated modal instance to guard; those contracts must be applied when they are introduced. GameFlow's cleanup deliberately names the two current classes, so future Dialogue/Result integration must extend lifecycle cleanup appropriately.
 
-Local candidate changes only:
-- Config/DefaultEngine.ini: the two startup map settings.
-- Content/RecordShop/Core/Flow/BP_GameFlowManager.uasset: the existing CustomerExited consumer's minimal cleanup.
-- Docs/OVERNIGHT_INTEGRATION_2026-10-09.md: this report.
+## Deliberately omitted and safety
 
-No new teammate binary is included. “Integrated” above means modified and verified in this worktree; it does not imply committed or published.
+- No environment branch merge, contributor Test Map, _GENERATED map garbage, or production-map overwrite.
+- No import of old WBP_RecordSelection / WBP_RecordSelection2 or obsolete organized dialogue duplicates.
+- No restoration of BP_RecordGameInstance selected-record ownership.
+- No assumed Good/Bad vocabulary, score threshold, fabricated story or authored result text.
+- No completion event falsely emitted at placeholder audio start.
+- No full day/customer queue, actor-destruction policy change or unrelated HUD removal.
+- No private customer map import; no claim of newest customer polish validation.
+- No visual/design approval or packaged/audio verification claimed.
 
-## Explicitly Omitted Assets
+## Reproduction and handoff
 
-- Environment PR #9 wholesale merge, L_Env_Test, all 54 newly generated test-map packages and other private-map payloads.
-- Four new turntable meshes and material/Fab assets pending hydration and dependency validation.
-- Contributor BP_RecordGameInstance and stale shared/map replacements.
-- ST_CustomerRequest and recommendation/result implementation pending binary and contract inspection.
-- Both fork record-selection alternatives; dialogue/result widgets pending hydration.
-- Customer private L_CustomerAI_Test and development-directory churn.
-- Obsolete organized dialogue copies; root assets remain unchanged.
-- All Saved, Intermediate and DerivedDataCache outputs, including the failed modal experiment.
+From the repository root, run:
 
-## Remaining Blockers
+```powershell
+./Scripts/Unreal/Invoke-IntegrationPython.ps1 -Script Scripts/Unreal/validate_integration_round.py -Name runtime -Editor
+```
 
-1. Git metadata is outside the permitted write root; origin/fork fetch cannot update FETCH_HEAD. Approval is unavailable in this unattended session.
-2. GitHub Git/LFS transport is blocked; origin LFS also fails credential-store access. GitHub connector read access verified refs and PR metadata but does not provide these LFS binaries to Unreal.
-3. New mesh/UI/turntable/request binaries are absent; engine inspection and safe selective transplantation are blocked.
-4. No agreed live-customer -> CustomerData/CurrentMood mapping or meaningful dialogue rows.
-5. No inspected production TurntableCompleted or RecommendationResult contract; no agreed recommendation vocabulary. Result UI/narrative is unavailable.
-6. Existing modal duplication and turntable close/input ownership remain. The editor graph experiment crashed before save.
-7. Full rendered/audio validation and a packaged run were not performed.
+Read both the JSON assertions and Unreal log; an editor exit code alone is not a test verdict. The script invalidates stale JSON before preflight, and records `complete`, individual assertion results, the initial natural samples and the first downstream diagnostic boundary. Its reflected interactions and Slate virtual-user keys are isolated validation, not natural player E2E.
 
-### Source hygiene and publication
+Evidence is under ignored `Saved/OvernightIntegration/Round1/`: inventory.json, audit.log, graphs.json, guards.json, turntable-close.json, selection-close.json, escape-key-force.json, exit-modals.json, graphs-final.json, graph-delta.json, runtime.json and associated logs. Failed attempts are retained separately. No Saved/Intermediate/DDC file belongs in the harness commit.
 
-- git status --short reports exactly two modified tracked files and this untracked report. No modified production map or other binary.
-- Plain git diff --check was blocked because the LFS clean filter tried to write the read-only shared .git/lfs/tmp directory.
-- git -c lfs.storage=Saved/OvernightIntegration/LFS diff --check passed with no output, using an absolute workspace-local cache path in the actual invocation. No repository configuration was changed to achieve this.
-- An exact-path staging attempt, git add -- Config/DefaultEngine.ini, failed: Unable to create D:/univ/3-1/GameEngine/Termproject/RecordShop/.git/worktrees/RecordShop_overnight/index.lock: Permission denied.
-- Nothing is staged. No commit was attempted after staging failed. COMMITS CREATED: NONE.
-- PUSH: FAIL / skipped because there is no new commit and Git/LFS transport is blocked. The unchanged base branch was not published as if it contained the candidate changes.
-- FINAL HEAD: aa1b9a440d1cd21205c34bf79e0027596cc21cc6.
-- Local develop and origin/develop remain aa1b9a440d1cd21205c34bf79e0027596cc21cc6. DEVELOP MODIFIED: NO.
-- No force push, reset --hard, wholesale contributor merge or contributor branch mutation occurred.
-
-Final area statuses: ENVIRONMENT BLOCKED; TURNTABLE PARTIAL (existing prototype verified, new port blocked); RECOMMENDATION BLOCKED; UI BLOCKED; DIALOGUE FLOW BLOCKED; CUSTOMER LIFECYCLE PARTIAL; STARTUP MAP PASS; DUPLICATE UI GUARD BLOCKED; E2E FAIL.
-
-## Recommended Morning Actions
-
-1. Resume from this exact feature branch with write access to its linked Git metadata and working Git/LFS network credentials. Preserve the two verified local changes; review this report before staging.
-2. Review the saved CustomerExited handler and startup config, then create focused commits using exact paths. Exclude Saved/Intermediate/DerivedDataCache. Push only feature/overnight-integration-2026-10-09; do not merge develop or open a PR automatically.
-3. Hydrate the four canonical meshes first, inspect actual dependency closure/pivots/scale/collision in UE 5.8.2, and retain only reusable dependencies and source notes. Keep L_Env_Test/generated content out.
-4. Hydrate all five new turntable assets for inspection, keep GameInstance out, and port only behavior compatible with the production dispatcher/SetRecord contract. Agree request/result vocabulary before scoring.
-5. Hydrate latest UI, inspect/compile each widget, and use Editor asset operations for production paths. Retain one ST_RecordData selection system.
-6. Agree the existing-data customer mapping, then add one GameFlow-owned DialogueManager component, bind UI/finish before StartDialogue, and provide Next/close/input restoration. Author actual dialogue separately.
-7. Repair/review modal guards interactively after diagnosing the failed graph compilation. Add and test a reachable turntable cancel/close path; verify all three shelves share one selection modal.
-8. Repeat the natural cycle from a fresh game start. Stop/report the first missing handoff; do not count explicit FinishResult or injected button calls as natural E2E proof.
+The harness owns commit/push. Current HEAD remains 3788f1f; exactly five production Blueprint files, this report and two validation scripts are the intended deliverables. No production map, GameInstance, root dialogue asset, customer asset or config file is modified by this round.
