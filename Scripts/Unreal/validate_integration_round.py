@@ -7,13 +7,16 @@ real interactions/buttons or simulated Slate keys and are NOT E2E evidence.
 import json
 import time
 import traceback
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 import unreal
 
 ROOT = Path(unreal.Paths.project_dir())
-OUT = ROOT / 'Saved/OvernightIntegration/Round1/runtime.json'
+OUT = ROOT / 'Saved/OvernightIntegration/Round1/repair-runtime.json'
+sys.path.insert(0, str(ROOT / 'Scripts/Unreal'))
+from checkpoint_repair_checks import physical_input_checks, rpm_ui_checks
 FLOW = '/Game/RecordShop/Core/Flow/BP_GameFlowManager'
 SHELF = '/Game/RecordShop/Interaction/Actors/BP_RecordShelf'
 TURNTABLE = '/Game/RecordShop/Interaction/Actors/BP_Turntable'
@@ -46,7 +49,11 @@ def check(name, action):
 
 save()  # Invalidate an earlier result even if preflight fails before PIE starts.
 RESULT['startup_world'] = editor.get_editor_world().get_path_name()
-for path in [FLOW, SHELF, TURNTABLE, SELECT_UI, TURNTABLE_UI, CUSTOMER, '/Game/DialogueManager']:
+for path in [FLOW, SHELF, TURNTABLE, SELECT_UI, TURNTABLE_UI, CUSTOMER, '/Game/DialogueManager',
+             '/Game/RecordShop/Interaction/Components/BPC_Interaction',
+             '/Game/RecordShop/Interaction/Interfaces/BPI_Interactable',
+             '/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter',
+             '/Game/ThirdPerson/Blueprints/BP_ThirdPersonPlayerController']:
     RESULT['compiles'][path] = unreal.BlueprintEditorLibrary.compile_blueprint(unreal.load_asset(path))
 assert all(RESULT['compiles'].values()), 'Blueprint compile failed'
 for path in [SELECT_UI, TURNTABLE_UI]:
@@ -196,7 +203,13 @@ def diagnostics(world, flow):
                 'audio_limit': 'Current authored records have Audio=None; audible playback is unverified.'}
 
     check('turntable_invalid_valid_order_and_repeat', turntable_order)
-    state['keyboard'] = keyboard_closes()
+    rpm_ui_checks(world, pawn, cls(TURNTABLE), cls(TURNTABLE_UI), tt.get_editor_property('CurrentRecord'), check)
+
+    def extended_checks():
+        yield from physical_input_checks(world, flow, pawn,
+                                        [(shelves[0], cls(SELECT_UI)), (tt, cls(TURNTABLE_UI))], RESULT, save)
+        yield from keyboard_closes()
+    state['keyboard'] = extended_checks()
 
 
 def tick(delta):
@@ -248,7 +261,7 @@ def tick(delta):
                 'note': 'FinishResult is injected ONLY for isolated lifecycle regression.'}
             flow.call_method('FinishResult')
             save()
-        if elapsed >= 45 and not state['ended']:
+        if elapsed >= 60 and state['exit_requested'] and not state['ended']:
             state['ended'] = True
             pc = unreal.GameplayStatics.get_player_controller(world, 0)
             remaining = sum(len(unreal.WidgetLibrary.get_all_widgets_of_class(world, cls(path), True))
