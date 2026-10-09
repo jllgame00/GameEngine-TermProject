@@ -105,12 +105,12 @@ function Invoke-CodexRun {
     )
 
     $args = @(
-        "exec",
-        "--model", $Model,
-        "--sandbox", "workspace-write",
-        "--ask-for-approval", "never",
-        "--config", "model_reasoning_effort=$Effort",
-        "--output-last-message", $LastMessagePath
+    "--ask-for-approval", "never",
+    "exec",
+    "--model", $Model,
+    "--sandbox", "workspace-write",
+    "--config", "model_reasoning_effort=$Effort",
+    "--output-last-message", $LastMessagePath
     )
     if ($SchemaPath) { $args += @("--output-schema", $SchemaPath) }
 
