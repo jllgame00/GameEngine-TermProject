@@ -1,3 +1,5 @@
+> **Current V4 checkpoint:** see [OVERNIGHT_INTEGRATION_2026-10-10_V4.md](OVERNIGHT_INTEGRATION_2026-10-10_V4.md) for the implemented full mechanical customer cycle, final validation, remaining dependencies and terminal decision. Everything below describes earlier checkpoints.
+
 > **Safety verdict superseded:** the independent auditor reproduced a D3D12 process exit of `0xC0000005` after assertions completed. The current crash investigation, startup diagnosis and cook results are recorded at the top of [the October 9 checkpoint report](OVERNIGHT_INTEGRATION_2026-10-09.md). Earlier PASS statements below are historical run results, not current checkpoint approval.
 
 # Overnight Integration — 2026-10-10

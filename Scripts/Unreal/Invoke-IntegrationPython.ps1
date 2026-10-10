@@ -23,8 +23,8 @@ $arguments = @(
 # Widget construction can trigger compiler GUID fixup ensures. Disable crash-report
 # collection only for asset construction; validation always uses default diagnostics.
 if ($AssetConstruction) {
-    if (-not $Editor -or (Split-Path -Leaf $scriptPath) -ne 'integrate_dialogue_handoff.py') {
-        throw 'AssetConstruction is restricted to the one-time dialogue asset installer; never use it for validation.'
+    if (-not $Editor -or (Split-Path -Leaf $scriptPath) -notin @('integrate_dialogue_handoff.py', 'complete_mvp_flow.py')) {
+        throw 'AssetConstruction is restricted to the one-time widget installers; never use it for validation.'
     }
     $arguments += '-handleensurepercent=0'
 }
