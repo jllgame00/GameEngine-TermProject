@@ -40,6 +40,23 @@ class LogGateTests(unittest.TestCase):
     def test_clean_commandlet_passes(self):
         self.assertTrue(classify_log('LogExit: Exiting')['globally_error_free'])
 
+    def test_missing_node_guid_fails_readiness_even_with_known_startup(self):
+        warning = ("LogBlueprint: Warning: Node '/Game/RecordShop/Interaction/Actors/"
+                   "BP_Turntable.BP_Turntable:EventGraph.EdGraphNode_Comment_2' missing NodeGuid, "
+                   "this can cause deterministic cooking issues please resave package.")
+        for prefix in ('', smoke_block()):
+            with self.subTest(prefix=prefix):
+                report = classify_log(prefix + warning)
+                self.assertFalse(report['gameplay_log_pass'])
+                self.assertFalse(report['globally_error_free'])
+                self.assertEqual(len(report['unexpected_errors']), 1)
+                self.assertEqual(report['unexpected_errors'][0]['text'], warning)
+                self.assertEqual(len(report['known_startup_engine_smoke_errors']),
+                                 15 if prefix else 0)
+
+    def test_unrelated_warning_does_not_fail_readiness(self):
+        self.assertTrue(classify_log('LogBlueprint: Warning: unrelated diagnostic')['globally_error_free'])
+
 
 if __name__ == '__main__':
     unittest.main()
