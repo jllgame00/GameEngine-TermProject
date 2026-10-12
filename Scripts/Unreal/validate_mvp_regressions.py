@@ -6,7 +6,7 @@ ROOT=Path(unreal.Paths.project_dir());sys.path.insert(0,str(ROOT/'Scripts/Unreal
 from mvp_graph_helpers import *
 def component_state(actor):
     result = {}
-    for name in ('Lid', 'Record', 'Tonearm'):
+    for name in ('Lid', 'Record', 'Tonearm', 'TonearmPivot'):
         component = actor.get_editor_property(name)
         rotation = component.get_editor_property('relative_rotation')
         result[name] = {'rotation': [round(rotation.pitch, 4), round(rotation.yaw, 4),
@@ -15,6 +15,66 @@ def component_state(actor):
                         'location': component.get_editor_property('relative_location').export_text(),
                         'scale': component.get_editor_property('relative_scale3d').export_text()}
     return result
+
+
+def presentation_motion_checks(world, turntable_class, widget_class, pawn, record, check):
+    """Direct deterministic motion checks, including interruption; not natural input."""
+    def run():
+        statics = unreal.get_default_object(unreal.GameplayStatics)
+        transform = unreal.Transform(location=unreal.Vector(0, 0, 3000))
+        scale = unreal.SpawnActorScaleMethod.MULTIPLY_WITH_ROOT
+        actor = statics.call_method('BeginDeferredActorSpawnFromClass', args=(
+            world, turntable_class, transform,
+            unreal.SpawnActorCollisionHandlingMethod.ALWAYS_SPAWN, None, scale))
+        actor = statics.call_method('FinishSpawningActor', args=(actor, transform, scale))
+        actor.set_actor_tick_enabled(False)
+        observations = []
+        try:
+            def sample(component, property_name, axis):
+                return getattr(actor.get_editor_property(component).get_editor_property(property_name), axis)
+            for method, component, prop, axis, beginning, ending, setup in (
+                ('OpenLid', 'Lid', 'relative_rotation', 'pitch', 0, -70, ()),
+                ('PlaceRecord', 'Record', 'relative_location', 'z', 62.383362, 22.383362, ('OpenLid',)),
+                ('MoveTonearm', 'TonearmPivot', 'relative_rotation', 'yaw', 0, 35,
+                 ('OpenLid', 'PlaceRecord', 'SelectRPM33')),
+            ):
+                actor.call_method('SetRecord', args=(record,))
+                initial = component_state(actor)
+                for previous in setup:
+                    actor.call_method(previous)
+                actor.call_method(method)
+                assert abs(sample(component, prop, axis)-beginning) < 0.01, method+' must begin at source start pose'
+                actor.call_method('ReceiveTick', args=(0.5,))
+                middle = sample(component, prop, axis)
+                assert abs(middle-(beginning+ending)/2) < 0.01, (method, middle)
+                actor.call_method(method)
+                assert abs(sample(component, prop, axis)-middle) < 0.01, 'Repeated action rewound motion'
+                actor.call_method('ReceiveTick', args=(0.5,))
+                assert abs(sample(component, prop, axis)-ending) < 0.01, method
+                observations.append({'action': method, 'midpoint': middle, 'end': ending})
+                actor.call_method('SetRecord', args=(record,))
+                for previous in setup:
+                    actor.call_method(previous)
+                actor.call_method(method)
+                actor.call_method('ReceiveTick', args=(0.25,))
+                actor.call_method('SetRecord', args=(record,))
+                actor.call_method('ReceiveTick', args=(2.0,))
+                assert component_state(actor) == initial, 'SetRecord did not cancel motion'
+            actor.call_method('Interact', args=(pawn,))
+            widget = next(w for w in unreal.WidgetLibrary.get_all_widgets_of_class(world, widget_class, True)
+                          if w.get_editor_property('TurntableRef') == actor)
+            actor.call_method('OpenLid')
+            actor.call_method('ReceiveTick', args=(0.25,))
+            widget.remove_from_parent()
+            assert widget.get_editor_property('TurntableRef') is None
+            assert abs(sample('Lid', 'relative_rotation', 'pitch')+70) < 0.01
+            settled = component_state(actor)
+            actor.call_method('ReceiveTick', args=(2.0,))
+            assert component_state(actor) == settled, 'Closed modal left motion running'
+            return observations
+        finally:
+            actor.destroy_actor()
+    check('presentation_motion_midpoints_reset_and_close', run)
 
 
 def repeat_setup_checks(world, turntable_class, record, check):
@@ -28,6 +88,13 @@ def repeat_setup_checks(world, turntable_class, record, check):
         actor = statics.call_method('FinishSpawningActor', args=(actor, transform, scale))
         observations = []
         try:
+            for part in ('Base', 'Lid', 'Record', 'Tonearm'):
+                component = actor.get_editor_property(part)
+                assert component.get_editor_property('static_mesh').get_name() == 'SM_Turntable_'+part
+                scale3d = component.get_editor_property('relative_scale3d')
+                assert all(abs(value-1) < 0.001 for value in (scale3d.x, scale3d.y, scale3d.z))
+            pivot = actor.get_editor_property('TonearmPivot')
+            assert actor.get_editor_property('Tonearm').get_attach_parent() == pivot
             initial = component_state(actor)
             actor.call_method('SetRecord', args=(record,))
             for rpm in (33, 45, 78):
@@ -75,7 +142,7 @@ def rotation_checks(world, turntable_class, source_record, result, save):
                 pc = unreal.GameplayStatics.get_player_controller(world, 0)
                 view_target = pc.get_view_target()
                 target = actor.get_actor_location()
-                position = target + unreal.Vector(-300, -300, 200)
+                position = target + unreal.Vector(-160, -160, 110)
                 view = unreal.Transform(location=position,
                     rotation=unreal.MathLibrary.find_look_at_rotation(position, target))
                 camera = statics.call_method('BeginDeferredActorSpawnFromClass', args=(
@@ -102,6 +169,29 @@ def rotation_checks(world, turntable_class, source_record, result, save):
                           source_record.export_text())
             record.import_text(text)
             actor.call_method('SetRecord', args=(record,))
+            if rpm == 33:
+                for method, alpha in [('OpenLid', 'LidMotionAlpha'),
+                                      ('PlaceRecord', 'RecordMotionAlpha'),
+                                      ('MoveTonearm', 'TonearmMotionAlpha')]:
+                    if method == 'MoveTonearm':
+                        actor.call_method('SelectRPM33')
+                    actor.call_method(method)
+                    deadline = time.monotonic()+8
+                    while actor.get_editor_property(alpha) < 0.3:
+                        assert time.monotonic() < deadline, 'PIE motion failed to advance'
+                        yield
+                    progress = actor.get_editor_property(alpha)
+                    assert 0.3 <= progress < 1, 'No observable intermediate motion'
+                    observations.append({'actual_pie_motion': method, 'alpha': progress,
+                                         'components': component_state(actor)})
+                    capture(method+'-moving')
+                    while actor.get_editor_property(alpha) < 1:
+                        assert time.monotonic() < deadline
+                        yield
+                    capture(method+'-settled')
+                    for _ in range(3):
+                        yield
+                actor.call_method('SetRecord', args=(record,))
             actor.set_actor_tick_enabled(False)
             mesh = actor.get_editor_property('Record')
             def yaw():
@@ -139,7 +229,7 @@ def rotation_checks(world, turntable_class, source_record, result, save):
             tick(0.25)
             assert abs(yaw()-stopped) < 0.001, 'Rotation continued after completion'
             actor.call_method('SetRecord', args=(source_record,))
-            assert abs(yaw()) < 0.001 and not mesh.is_visible()
+            assert abs(yaw()-initial) < 0.001 and not mesh.is_visible()
             capture('reset')
             for _ in range(4):
                 yield
@@ -348,6 +438,14 @@ flow_pin=fixture_profile.add_graph_input_parameter('Flow',L.get_object_reference
 profile_pin=fixture_profile.add_graph_input_parameter('Profile',L.get_member_variable_type(unreal.load_asset(DM),'CurrentCustomer'))
 setter=fixture_profile.add_set_member_variable_node('CustomerProfile',customer_path+'.BP_Customer_C');link(customer_pin,pin(setter,'self'));link(profile_pin,pin(setter,'CustomerProfile'));link(fixture_profile.find_graph_entry_pin(),setter.find_execute_pin())
 reset=fixture_profile.add_set_member_variable_node('DialogueStartedForCustomer',FLOW+'.BP_GameFlowManager_C');link(flow_pin,pin(reset,'self'));val(pin(reset,'DialogueStartedForCustomer'),'false');link(setter.find_then_pin(),reset.find_execute_pin())
+score_profile=function(probe,'SetScoringProfileFixture')
+manager_pin=score_profile.add_graph_input_parameter('Manager',L.get_object_reference_type(cls(DM)))
+profile_pin=score_profile.add_graph_input_parameter('Profile',L.get_member_variable_type(unreal.load_asset(DM),'CurrentCustomer'))
+mood_pin=score_profile.add_graph_input_parameter('Mood',L.get_basic_type_by_name('string'))
+setter=score_profile.add_set_member_variable_node('CurrentCustomer',DM+'.DialogueManager_C')
+link(manager_pin,pin(setter,'self'));link(profile_pin,pin(setter,'CurrentCustomer'));link(score_profile.find_graph_entry_pin(),setter.find_execute_pin())
+setter_mood=score_profile.add_set_member_variable_node('CurrentMood',DM+'.DialogueManager_C')
+link(manager_pin,pin(setter_mood,'self'));link(mood_pin,pin(setter_mood,'CurrentMood'));link(setter.find_then_pin(),setter_mood.find_execute_pin())
 assert L.compile_blueprint(probe)
 observer=unreal.get_default_object(probe.generated_class())
 observe_method=str(bind_event.get_node_title())
@@ -417,6 +515,39 @@ def run():
    record=tt.get_editor_property('CurrentRecord').export_text();assert f'Test_record_0{i+1}' in record;observed.append(record)
   return observed
  check('selection_ownership_all_records_and_modals',selection_guards)
+ def optional_score():
+  import re
+  assert not flow.get_editor_property('RawScoreAvailable')
+  flow.call_method('EvaluateRecordScore',args=('fixture-mood','fixture-preference','fixture-personality'))
+  assert not flow.get_editor_property('RawScoreAvailable'), 'Blank customer inputs must remain unavailable'
+  profile=manager.get_editor_property('CurrentCustomer');original=profile.export_text()
+  original_mood=manager.get_editor_property('CurrentMood')
+  fixture=original
+  for name,value in [('Personality','fixture-personality'),('MusicPreference','fixture-preference')]:
+   fixture=re.sub(r'('+name+r'_[A-Za-z0-9_]+)=\"[^\"]*\"',lambda m:m[1]+'="'+value+'"',fixture)
+  try:
+   profile.import_text(fixture);observer.call_method('SetScoringProfileFixture',args=(manager,profile,'fixture-mood'))
+   observations=[]
+   for inputs,expected in [(('fixture-mood','fixture-preference','fixture-personality'),3),
+                           (('other','other','other'),0),
+                           (('fixture-mood','other','other'),1)]:
+    flow.call_method('EvaluateRecordScore',args=inputs)
+    assert flow.get_editor_property('RawScoreAvailable')
+    assert flow.get_editor_property('RawRecommendationScore')==expected
+    observations.append({'inputs':inputs,'raw_score':expected})
+   flow.call_method('EvaluateRecordScore',args=('','fixture-preference','fixture-personality'))
+   assert not flow.get_editor_property('RawScoreAvailable')
+   manager.call_method('EvaluateLP',args=('fixture-mood','fixture-preference','fixture-personality',[]))
+   assert not flow.get_editor_property('RawScoreAvailable'), 'Unsolicited output must not certify missing inputs'
+   flow.call_method('EvaluateRecordScore',args=('fixture-mood','other','other'))
+   flow.call_method('HandleRecordSelected',args=(tt.get_editor_property('CurrentRecord'),))
+   assert not flow.get_editor_property('RawScoreAvailable'), 'Record reselection kept a stale score'
+   flow.call_method('EvaluateRecordScore',args=('fixture-mood','other','other'))
+   return {'cases':observations,'limit':'In-memory explicit scoring/profile fixtures; no authored mapping or qualitative meaning.'}
+  finally:
+   profile.import_text(original);observer.call_method('SetScoringProfileFixture',args=(manager,profile,original_mood))
+ check('optional_raw_score_availability_and_propagation',optional_score)
+ presentation_motion_checks(world,cls(TT),cls(TU),pawn,tt.get_editor_property('CurrentRecord'),check)
  rpm_ui_checks(world,pawn,cls(TT),cls(TU),tt.get_editor_property('CurrentRecord'),check)
  repeat_setup_checks(world,cls(TT),tt.get_editor_property('CurrentRecord'),check)
  def completion_guards():
@@ -433,11 +564,20 @@ def run():
   interact(tt);interact(shelves[0]);assert not widgets(TU) and not widgets(SU)
   assert pc.get_editor_property('show_mouse_cursor')
   assert str(result.get_editor_property('RecordID').get_text())=='Test_record_03'
+  assert str(result.get_editor_property('ScoreStatus').get_text())=='Score: 1'
+  flow.call_method('EvaluateRecordScore',args=('late','late','late'))
+  manager.call_method('EvaluateLP',args=('late','late','late',[]))
+  assert flow.get_editor_property('RawScoreAvailable') and flow.get_editor_property('RawRecommendationScore')==1
   return {'one_completion':True,'one_result':True,'cross_modal_blocked':True}
  check('completion_result_and_duplicate_guards',completion_guards)
  # SetInputMode queues owning-player Slate operations until the frame finishes.
  # Observe focus on subsequent frames without assigning any test-side focus.
  for _ in range(4):yield
+ if '-nullrhi' not in unreal.SystemLibrary.get_command_line().lower():
+  screenshot=OUT.with_name(OUT.stem+'-raw-score-result.png')
+  unreal.SystemLibrary.execute_console_command(world,'Shot showui filename="'+str(screenshot)+'" -nosuffix')
+  R['raw_score_screenshot_requested']=str(screenshot)
+  for _ in range(3):yield
  def focused_continue():
   result=widgets(RU)[0]
   assert result.get_editor_property('Continue').has_keyboard_focus(), 'Result default keyboard focus'
@@ -450,6 +590,8 @@ def run():
   assert time.monotonic()-start<100,'Customer exit timeout'
   yield
  def cleanup():
+  assert not flow.get_editor_property('RawScoreAvailable')
+  assert flow.get_editor_property('RawRecommendationScore')==0
   assert int(flow.get_editor_property('CurrentState').value)==0;assert not any(count_modals().values());assert not pc.get_editor_property('show_mouse_cursor')
   assert flow.get_editor_property('DialogueWidgetRef') is None and flow.get_editor_property('ResultWidgetRef') is None
   flow.call_method('HandleCustomerExited');flow.call_method('CloseRecordShopInteractionModals')
