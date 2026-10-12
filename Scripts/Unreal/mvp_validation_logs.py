@@ -21,6 +21,9 @@ def classify_log(text):
         if known and i in smoke:
             startup.append({'line': i + 1, 'text': line})
         elif (re.search(r'\b(?:Error|Fatal):', line)
+              # Unreal emits this as a Warning, but a persisted production node
+              # without identity is not ready for deterministic cooking.
+              or re.search(r"\bNode '/Game/[^']+' missing NodeGuid\b", line)
               or re.search(r'Accessed None|Blueprint Runtime Error|Ensure condition failed|Assertion failed|Unhandled Exception', line, re.I)):
             errors.append({'line': i + 1, 'text': line})
     return {'log_present': bool(text), 'unexpected_errors': errors,

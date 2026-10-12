@@ -31,6 +31,25 @@ def state(value):assert int(flow.get_editor_property('CurrentState').value)==val
 def no_modals():assert not any(widgets(x) for x in [DU,SU,TU,RU])
 def wait_frames(count=4):
  for _ in range(count):yield
+
+def capture(label):
+ # Observe the actual viewport only in rendered runs. Requests are evidence,
+ # not visual approval; the reviewer must inspect the resulting images.
+ if '-nullrhi' in unreal.SystemLibrary.get_command_line().lower():return
+ target=OUT.with_name(OUT.stem+'-'+label+'.png')
+ unreal.SystemLibrary.execute_console_command(world,'Shot showui filename="'+str(target)+'" -nosuffix')
+ R.setdefault('screenshots_requested',[]).append({'stage':label,'path':str(target)});save()
+ yield from wait_frames(4)
+
+def observe_customer(route):
+ customer=flow.get_editor_property('ActiveCustomer')
+ if not customer:return
+ sample={'seconds':round(time.monotonic()-start,3),'route':route,
+         'location':str(customer.get_actor_location()),'velocity':str(customer.get_velocity()),
+         'state':str(flow.get_editor_property('CurrentState'))}
+ samples=R.setdefault('customer_observations',[])
+ if not samples or sample['seconds']-samples[-1]['seconds']>=0.1:
+  samples.append(sample)
 def click(widget,name):
  button=widget.get_editor_property(name)
  interaction.set_focus(button)
@@ -125,43 +144,51 @@ def run():
  mark('Greybox startup')
  while not widgets(DU):
   assert time.monotonic()-start<70,'Customer did not naturally reach dialogue'
+  observe_customer('entry_to_ready')
   yield
  state(1);customer=flow.get_editor_property('ActiveCustomer');assert customer
  manager=flow.get_editor_property('DialogueManagerRef');assert manager.get_editor_property('CurrentLineIndex')==1
  assert manager.get_editor_property('CurrentCustomer').export_text()==customer.get_editor_property('CustomerProfile').export_text()
  assert manager.get_editor_property('CurrentMood')==''
  assert len(widgets(DU))==1;mark('Spawn -> entry -> Ready -> StartDialogue -> UI',line_index=1)
+ observe_customer('ready_dialogue')
+ yield from capture('dialogue')
  interaction=pawn.call_method('AddComponentByClass',args=(unreal.WidgetInteractionComponent.static_class(),False,unreal.Transform(),False))
  interaction.set_component_tick_enabled(False);interaction.activate(True)
  yield from click(widgets(DU)[0],'Next')
  assert not widgets(DU);state(2);assert not pc.get_editor_property('show_mouse_cursor');mark('Next -> finished -> RecordSelection')
  shelf=unreal.GameplayStatics.get_all_actors_of_class(world,cls(SHELF))[0]
  yield from interact(shelf,SU);mark('Shelf interaction -> record selection UI')
+ yield from capture('record-selection')
  yield from click(widgets(SU)[0],'BTN_LP01')
  tt=unreal.GameplayStatics.get_all_actors_of_class(world,cls(TT))[0]
  assert tt.get_editor_property('HasRecord');assert 'Test_record_01' in tt.get_editor_property('CurrentRecord').export_text();assert not widgets(SU);state(3)
  mark('Record selected -> shelf -> GameFlow -> Turntable.SetRecord',record=tt.get_editor_property('CurrentRecord').export_text())
  yield from interact(tt,TU);mark('Turntable interaction -> UI')
+ yield from capture('turntable-open')
  widget=widgets(TU)[0]
  for name,step in [('BTN_OpenLid',1),('BTN_PlaceRecord',2),('BTN_SelectRPM',2),('BTN_RPM33',3),('BTN_MoveTonearm',4)]:
   yield from click(widget,name);assert tt.get_editor_property('TurntableStep')==step,(name,tt.get_editor_property('TurntableStep'))
  mark('Ordered turntable setup',rpm=tt.get_editor_property('SelectedRPM'))
+ yield from capture('turntable-ready')
  yield from click(widget,'BTN_Play')
  assert tt.get_editor_property('TurntableStep')==5;assert tt.get_editor_property('CompletionSent');assert len(widgets(RU))==1;assert not widgets(TU);state(5)
  assert widget.get_editor_property('TurntableRef') is None
  result=widgets(RU)[0];assert str(result.get_editor_property('RecordID').get_text())=='Test_record_01'
  assert str(result.get_editor_property('ScoreStatus').get_text())=='Score: unavailable'
  mark('Audio=None deterministic completion -> Result',score_available=False,audible_playback=False)
- unreal.SystemLibrary.execute_console_command(world,'Shot showui filename="'+str(OUT.with_suffix('.png'))+'" -nosuffix')
+ yield from capture('result')
  yield from wait_frames(30)
  before=customer.get_actor_location();yield from continue_with_default_focus(result)
  assert not widgets(RU);assert flow.get_editor_property('ResultSubmitted');assert not pc.get_editor_property('show_mouse_cursor')
  mark('Result Continue -> FinishResult -> customer exit route',before_exit=str(before))
  while flow.get_editor_property('ActiveCustomer'):
   assert time.monotonic()-start<150,'Exit route did not finish'
+  observe_customer('exit')
   yield
  state(0);no_modals();assert not pc.get_editor_property('show_mouse_cursor');assert flow.get_editor_property('DialogueWidgetRef') is None;assert flow.get_editor_property('ResultWidgetRef') is None
  mark('CustomerExited -> ActiveCustomer cleared -> Explore',after_exit=str(customer.get_actor_location()))
+ yield from capture('explore')
  interaction.destroy_component(pawn)
  R['pass']=True;R['complete']=True;save()
 

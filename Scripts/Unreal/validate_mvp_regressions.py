@@ -4,7 +4,305 @@ from pathlib import Path
 import unreal
 ROOT=Path(unreal.Paths.project_dir());sys.path.insert(0,str(ROOT/'Scripts/Unreal'))
 from mvp_graph_helpers import *
-from checkpoint_repair_checks import rpm_ui_checks,physical_input_checks
+def component_state(actor):
+    result = {}
+    for name in ('Lid', 'Record', 'Tonearm'):
+        component = actor.get_editor_property(name)
+        rotation = component.get_editor_property('relative_rotation')
+        result[name] = {'rotation': [round(rotation.pitch, 4), round(rotation.yaw, 4),
+                                     round(rotation.roll, 4)],
+                        'visible': component.is_visible(),
+                        'location': component.get_editor_property('relative_location').export_text(),
+                        'scale': component.get_editor_property('relative_scale3d').export_text()}
+    return result
+
+
+def repeat_setup_checks(world, turntable_class, record, check):
+    def run():
+        transform = unreal.Transform(location=unreal.Vector(0, 0, 3000))
+        statics = unreal.get_default_object(unreal.GameplayStatics)
+        scale = unreal.SpawnActorScaleMethod.MULTIPLY_WITH_ROOT
+        actor = statics.call_method('BeginDeferredActorSpawnFromClass', args=(
+            world, turntable_class, transform,
+            unreal.SpawnActorCollisionHandlingMethod.ALWAYS_SPAWN, None, scale))
+        actor = statics.call_method('FinishSpawningActor', args=(actor, transform, scale))
+        observations = []
+        try:
+            initial = component_state(actor)
+            actor.call_method('SetRecord', args=(record,))
+            for rpm in (33, 45, 78):
+                for method in ('OpenLid', 'PlaceRecord', f'SelectRPM{rpm}', 'MoveTonearm', 'PlayRecord'):
+                    actor.call_method(method)
+                assert actor.get_editor_property('CompletionSent')
+                before = component_state(actor)
+                assert before['Record']['visible']
+                actor.call_method('ReceiveTick', args=(0.25,))
+                assert component_state(actor) == before, 'Audio=None must not keep spinning'
+                actor.call_method('SetRecord', args=(record,))
+                after = component_state(actor)
+                observations.append({'rpm': rpm, 'before': before, 'after': after})
+                assert after == initial, {'initial': initial, 'observations': observations}
+                assert actor.get_editor_property('TurntableStep') == 0
+                assert actor.get_editor_property('SelectedRPM') == 0
+                assert not actor.get_editor_property('CompletionSent')
+                assert actor.get_editor_property('HasRecord')
+                assert actor.get_editor_property('PlaybackAudio') is None
+            return observations
+        finally:
+            actor.destroy_actor()
+    check('completed_playback_repeat_setup_components', run)
+
+
+def rotation_checks(world, turntable_class, source_record, result, save):
+    """Real engine sound fixture, direct tick math, then actual PIE tick observation."""
+    import re
+    for rpm in (33, 45, 78):
+        key = f'rpm{rpm}_playback_rotation'
+        actor = None
+        camera = None
+        observations = []
+        try:
+            transform = unreal.Transform(location=unreal.Vector(0, 0, 3000))
+            statics = unreal.get_default_object(unreal.GameplayStatics)
+            scale = unreal.SpawnActorScaleMethod.MULTIPLY_WITH_ROOT
+            actor = statics.call_method('BeginDeferredActorSpawnFromClass', args=(
+                world, turntable_class, transform,
+                unreal.SpawnActorCollisionHandlingMethod.ALWAYS_SPAWN, None, scale))
+            actor = statics.call_method('FinishSpawningActor', args=(actor, transform, scale))
+            rendered = '-nullrhi' not in unreal.SystemLibrary.get_command_line().lower()
+            if rendered:
+                # Unsaved observation camera only; production geometry is untouched.
+                pc = unreal.GameplayStatics.get_player_controller(world, 0)
+                view_target = pc.get_view_target()
+                target = actor.get_actor_location()
+                position = target + unreal.Vector(-300, -300, 200)
+                view = unreal.Transform(location=position,
+                    rotation=unreal.MathLibrary.find_look_at_rotation(position, target))
+                camera = statics.call_method('BeginDeferredActorSpawnFromClass', args=(
+                    world, unreal.CameraActor.static_class(), view,
+                    unreal.SpawnActorCollisionHandlingMethod.ALWAYS_SPAWN, None, scale))
+                camera = statics.call_method('FinishSpawningActor', args=(camera, view, scale))
+                pc.set_view_target_with_blend(camera)
+                for _ in range(4):
+                    yield
+            def capture(label):
+                if not rendered:
+                    return
+                path = Path(os.environ['MVP_RESULT']).with_name(
+                    Path(os.environ['MVP_RESULT']).stem+f'-rpm{rpm}-{label}.png')
+                unreal.SystemLibrary.execute_console_command(
+                    world, 'Shot showui filename="'+str(path)+'" -nosuffix')
+                observations.append({'screenshot_requested': str(path), 'stage': label,
+                                     'components': component_state(actor)})
+            record = actor.get_editor_property('CurrentRecord')
+            sound = unreal.load_asset('/Engine/EditorSounds/Notifications/CompileSuccess')
+            assert sound
+            text = re.sub(r'(Audio_[A-Za-z0-9_]+)=None',
+                          lambda m: m[1]+'="/Script/Engine.SoundWave\''+sound.get_path_name()+'\'"',
+                          source_record.export_text())
+            record.import_text(text)
+            actor.call_method('SetRecord', args=(record,))
+            actor.set_actor_tick_enabled(False)
+            mesh = actor.get_editor_property('Record')
+            def yaw():
+                return mesh.get_editor_property('relative_rotation').yaw
+            def tick(seconds):
+                actor.call_method('ReceiveTick', args=(seconds,))
+            initial = yaw()
+            tick(0.125)
+            assert abs(yaw()-initial) < 0.001, 'Rotation before playback'
+            for method in ('OpenLid', 'PlaceRecord', f'SelectRPM{rpm}', 'MoveTonearm', 'PlayRecord'):
+                actor.call_method(method)
+            audio = actor.get_editor_property('PlaybackAudio')
+            assert audio and audio.is_playing()
+            for seconds in (0.125, 0.25):
+                before = yaw()
+                tick(seconds)
+                delta = (yaw()-before) % 360
+                expected = rpm * 6 * seconds
+                observations.append({'delta_seconds': seconds, 'degrees': delta, 'expected': expected})
+                assert abs(delta-expected) < 0.01, observations[-1]
+            actor.set_actor_tick_enabled(True)
+            before = yaw()
+            for _ in range(3):
+                yield
+            assert abs((yaw()-before+180) % 360-180) > 0.01, 'PIE Tick did not rotate record'
+            observations.append({'actual_pie_tick_yaw_before': before, 'after': yaw()})
+            capture('playing')
+            deadline = time.monotonic()+15
+            while not actor.get_editor_property('CompletionSent'):
+                assert time.monotonic() < deadline
+                yield
+            stopped = yaw()
+            for _ in range(3):
+                yield
+            tick(0.25)
+            assert abs(yaw()-stopped) < 0.001, 'Rotation continued after completion'
+            actor.call_method('SetRecord', args=(source_record,))
+            assert abs(yaw()) < 0.001 and not mesh.is_visible()
+            capture('reset')
+            for _ in range(4):
+                yield
+            result['isolated'][key] = {'pass': True, 'observations': observations,
+                'limit': 'Isolated engine audio fixture and direct ReceiveTick math plus real PIE tick; not natural E2E or authored LP audio.'}
+        except Exception:
+            result['isolated'][key] = {'pass': False, 'observations': observations,
+                                       'error': traceback.format_exc()}
+        finally:
+            if camera:
+                pc.set_view_target_with_blend(view_target)
+                camera.destroy_actor()
+            if actor:
+                audio = actor.get_editor_property('PlaybackAudio')
+                if audio:
+                    audio.stop()
+                actor.destroy_actor()
+            save()
+
+
+def rpm_ui_checks(world, pawn, turntable_class, widget_class, record, check):
+    for rpm in (45, 78):
+        def run(rpm=rpm):
+            transform = unreal.Transform(location=unreal.Vector(0, 0, 3000))
+            statics = unreal.get_default_object(unreal.GameplayStatics)
+            scale = unreal.SpawnActorScaleMethod.MULTIPLY_WITH_ROOT
+            actor = statics.call_method('BeginDeferredActorSpawnFromClass', args=(
+                world, turntable_class, transform,
+                unreal.SpawnActorCollisionHandlingMethod.ALWAYS_SPAWN, None, scale))
+            actor = statics.call_method('FinishSpawningActor', args=(actor, transform, scale))
+            widget = None
+            observations = []
+            try:
+                actor.call_method('SetRecord', args=(record,))
+                actor.call_method('Interact', args=(pawn,))
+                widgets = list(unreal.WidgetLibrary.get_all_widgets_of_class(world, widget_class, True))
+                assert len(widgets) == 1
+                widget = widgets[0]
+                assert widget.get_editor_property('TurntableRef') == actor
+                options = widget.get_editor_property('VB_RPMOptions')
+
+                def click(button, expected):
+                    before = actor.get_editor_property('TurntableStep')
+                    widget.get_editor_property(button).get_editor_property('on_clicked').broadcast()
+                    after = actor.get_editor_property('TurntableStep')
+                    observations.append({'button': button, 'before': before, 'after': after,
+                                         'rpm': actor.get_editor_property('SelectedRPM'),
+                                         'options': str(options.get_visibility())})
+                    assert after == expected, observations[-1]
+
+                click('BTN_SelectRPM', 0)
+                assert options.get_visibility() == unreal.SlateVisibility.COLLAPSED
+                click('BTN_OpenLid', 1)
+                click('BTN_PlaceRecord', 2)
+                click('BTN_SelectRPM', 2)
+                assert options.get_visibility() == unreal.SlateVisibility.VISIBLE
+                click(f'BTN_RPM{rpm}', 3)
+                assert actor.get_editor_property('SelectedRPM') == rpm
+                assert options.get_visibility() == unreal.SlateVisibility.COLLAPSED
+                click('BTN_SelectRPM', 3)
+                assert options.get_visibility() == unreal.SlateVisibility.COLLAPSED
+                click('BTN_MoveTonearm', 4)
+                click('BTN_Play', 5)
+                click('BTN_Play', 5)
+                return {'events': observations, 'limit': 'OnClicked broadcasts, not mouse hit testing; Audio=None.'}
+            finally:
+                if widget:
+                    widget.remove_from_parent()
+                actor.destroy_actor()
+                pc = unreal.GameplayStatics.get_player_controller(world, 0)
+                pc.set_editor_property('show_mouse_cursor', False)
+                unreal.WidgetLibrary.set_input_mode_game_only(pc)
+        check(f'rpm{rpm}_widget_button_path', run)
+
+
+def enhanced_input_checks(world, flow, pawn, targets, result, save):
+    """Inject IA_Interact into the real local player; never call Interact/TryInteract.
+
+    Paired near/away cases exercise actual collision and interface dispatch. Pawn
+    teleporting supplies repeatable geometry, not natural navigation evidence.
+    """
+    key = 'synthetic_enhanced_input_sphere_trace_interface'
+    observations = []
+    original = pawn.get_actor_transform()
+    movement = pawn.get_component_by_class(unreal.CharacterMovementComponent)
+    mode = movement.get_editor_property('movement_mode')
+    try:
+        pc = unreal.GameplayStatics.get_player_controller(world, 0)
+        library = unreal.get_default_object(unreal.load_class(None, '/Script/Engine.SubsystemBlueprintLibrary'))
+        subsystem = library.call_method('GetLocalPlayerSubSystemFromPlayerController',
+                                        args=(pc, unreal.EnhancedInputLocalPlayerSubsystem.static_class()))
+        action = unreal.load_asset('/Game/RecordShop/Input/IA_Interact')
+        mapped_keys = [key.export_text() for key in subsystem.query_keys_mapped_to_action(action)]
+        assert 'E' in mapped_keys, mapped_keys
+        result['enhanced_input_mapping'] = {'action': action.get_path_name(), 'active_keys': mapped_keys}
+        component = pawn.get_editor_property('BPC_Interaction')
+        distance = component.get_editor_property('TraceDistance')
+        radius = component.get_editor_property('TraceRadius')
+        assert distance == 180 and radius == 60
+        movement.set_movement_mode(unreal.MovementMode.MOVE_FLYING)
+        movement.stop_movement_immediately()
+
+        def trace():
+            start = pawn.get_actor_location()
+            end = start + pawn.get_actor_forward_vector() * distance
+            hit = unreal.SystemLibrary.sphere_trace_single(
+                component, start, end, radius, unreal.TraceTypeQuery.ECC_INTERACTABLE,
+                False, [], unreal.DrawDebugTrace.NONE, True)
+            return hit
+
+        for actor, widget_class in targets:
+            origin, extent = actor.get_actor_bounds(False)
+            found = False
+            # Search an unobstructed approach using production collision settings.
+            for yaw, offset in [(0, unreal.Vector(-1, 0, 0)), (180, unreal.Vector(1, 0, 0)),
+                                (90, unreal.Vector(0, -1, 0)), (-90, unreal.Vector(0, 1, 0))]:
+                gap = (extent.x if offset.x else extent.y) + 100
+                pos = origin + offset * gap
+                pos.z = max(origin.z, original.translation.z)
+                pawn.set_actor_location_and_rotation(pos, unreal.Rotator(0, yaw, 0), False, True)
+                hit = trace()
+                if hit and actor.get_name() in hit.export_text():
+                    found = True
+                    break
+            assert found, f'No trace approach found for {actor.get_name()}'
+            yield
+            near_hit = trace()
+            assert near_hit and actor.get_name() in near_hit.export_text()
+            assert not unreal.WidgetLibrary.get_all_widgets_of_class(world, widget_class, True)
+            subsystem.inject_input_vector_for_action(action, unreal.Vector(1, 0, 0), [], [])
+            yield
+            widgets = list(unreal.WidgetLibrary.get_all_widgets_of_class(world, widget_class, True))
+            observations.append({'target': actor.get_name(), 'case': 'near',
+                                 'pawn': str(pawn.get_actor_location()), 'hit': near_hit.export_text(),
+                                 'widgets': len(widgets)})
+            assert len(widgets) == 1, observations[-1]
+            assert widgets[0].get_owning_player() == pc
+            flow.call_method('CloseRecordShopInteractionModals')
+            subsystem.inject_input_vector_for_action(action, unreal.Vector(), [], [])
+            yield
+            pawn.set_actor_rotation(unreal.Rotator(0, yaw + 180, 0), True)
+            yield
+            away_hit = trace()
+            assert not away_hit or actor.get_name() not in away_hit.export_text()
+            subsystem.inject_input_vector_for_action(action, unreal.Vector(1, 0, 0), [], [])
+            yield
+            count = len(unreal.WidgetLibrary.get_all_widgets_of_class(world, widget_class, True))
+            observations.append({'target': actor.get_name(), 'case': 'away', 'widgets': count,
+                                 'hit': away_hit.export_text() if away_hit else None})
+            assert count == 0, observations[-1]
+            subsystem.inject_input_vector_for_action(action, unreal.Vector(), [], [])
+            yield
+        result['isolated'][key] = {'pass': True, 'observations': observations,
+                                  'limit': 'Enhanced Input action injection; OS E key not synthesized.'}
+    except Exception:
+        result['isolated'][key] = {'pass': False, 'observations': observations, 'error': traceback.format_exc()}
+    finally:
+        flow.call_method('CloseRecordShopInteractionModals')
+        pawn.set_actor_transform(original, False, True)
+        movement.set_movement_mode(mode)
+        save()
+
+
 OUT=Path(os.environ['MVP_RESULT']);R={'complete':False,'pass':False,'isolated':{},'compiles':{},'provenance':'direct diagnostic calls, button delegates, transient unsaved observer; not E2E'}
 FLOW='/Game/RecordShop/Core/Flow/BP_GameFlowManager';TT='/Game/RecordShop/Interaction/Actors/BP_Turntable';SHELF='/Game/RecordShop/Interaction/Actors/BP_RecordShelf';DM='/Game/DialogueManager'
 DU='/Game/RecordShop/UI/Dialogue/WBP_Dialogue';SU='/Game/RecordShop/UI/RecordSelection/WBP_RecordSelect';TU='/Game/RecordShop/UI/Turntable/WBP_Turntable';RU='/Game/RecordShop/UI/Result/WBP_Result_IntegrationFallback'
@@ -120,6 +418,7 @@ def run():
   return observed
  check('selection_ownership_all_records_and_modals',selection_guards)
  rpm_ui_checks(world,pawn,cls(TT),cls(TU),tt.get_editor_property('CurrentRecord'),check)
+ repeat_setup_checks(world,cls(TT),tt.get_editor_property('CurrentRecord'),check)
  def completion_guards():
   interact(tt);interact(tt);interact(shelves[0]);assert len(widgets(TU))==1 and not widgets(SU)
   w=widgets(TU)[0];initial=observer.get_editor_property('Completions')
@@ -157,7 +456,7 @@ def run():
   assert not any(count_modals().values())
   return {'active_customer':None,'modals':count_modals(),'state':'Explore'}
  check('actual_exit_and_repeated_cleanup',cleanup)
- yield from physical_input_checks(world,flow,pawn,[(shelves[0],cls(SU)),(tt,cls(TU))],R,save)
+ yield from enhanced_input_checks(world,flow,pawn,[(shelves[0],cls(SU)),(tt,cls(TU))],R,save)
  interaction=pawn.call_method('AddComponentByClass',args=(unreal.WidgetInteractionComponent.static_class(),False,unreal.Transform(),False))
  interaction.set_component_tick_enabled(False);interaction.activate(True)
  try:
@@ -187,6 +486,7 @@ def run():
   finally:a.destroy_actor()
  check('no_record_rejects_play_and_completion',no_record)
  if '-nosound' not in unreal.SystemLibrary.get_command_line().lower():
+  yield from rotation_checks(world,cls(TT),tt.get_editor_property('CurrentRecord'),R,save)
   # Isolated callback plumbing with an existing ENGINE notification sound.
   # This is neither authored LP audio nor part of natural customer-cycle evidence.
   statics=unreal.get_default_object(unreal.GameplayStatics);transform=unreal.Transform(location=unreal.Vector(0,0,3000));scale=unreal.SpawnActorScaleMethod.MULTIPLY_WITH_ROOT
@@ -204,7 +504,9 @@ def run():
    assert not a.get_editor_property('CompletionSent');assert a.get_editor_property('TurntableStep')==5
    # The owned record must remain unchanged until real audio ends.
    other=tt.get_editor_property('CurrentRecord');other.import_text(original.replace('Test_record_03','replacement-fixture'))
+   before_components=component_state(a)
    a.call_method('SetRecord',args=(other,));assert 'replacement-fixture' not in a.get_editor_property('CurrentRecord').export_text()
+   assert component_state(a)==before_components, 'Rejected replacement reset active components'
    a.call_method('PlayRecord');assert a.get_editor_property('PlaybackAudio')==audio
    deadline=time.monotonic()+15
    while not a.get_editor_property('CompletionSent'):
