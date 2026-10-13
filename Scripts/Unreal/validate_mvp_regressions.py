@@ -471,7 +471,9 @@ def run():
   flow.call_method('FinishResult');assert flow.get_editor_property('ActiveCustomer');assert not flow.get_editor_property('ResultSubmitted')
   interact(tt);interact(shelves[0]);assert widgets(DU)==[original];assert not widgets(SU) and not widgets(TU)
   assert len(flow.get_components_by_class(cls(DM)))==1
-  click(original,'Next');assert not widgets(DU);assert original.get_editor_property('DialogueManagerRef') is None
+
+  for _ in range(4):click(original,'Next')
+  assert not widgets(DU);assert original.get_editor_property('DialogueManagerRef') is None
   assert int(flow.get_editor_property('CurrentState').value)==2
   manager.call_method('ShowNextLine');assert int(flow.get_editor_property('CurrentState').value)==2
   return {'one_manager':True,'repeated_ready':3,'premature_finish_rejected':True,'late_finish_idempotent':True}
@@ -490,21 +492,22 @@ def run():
    assert len(manager.get_editor_property('DialogueList'))==0 and not widgets(DU)
   finally:
    profile.import_text(original);observer.call_method('SetLiveProfileFixture',args=(customer,flow,profile));flow.call_method('HandleCustomerReadyForDialogue')
-   if widgets(DU):click(widgets(DU)[0],'Next')
-  assert manager.get_editor_property('CurrentMood')==''
+   for _ in range(4):
+    if widgets(DU):click(widgets(DU)[0],'Next')
+  assert manager.get_editor_property('CurrentMood')=='Quiet'
   return {'typed_active_customer_profile_copied':True,'mood_from_profile':True,'unmatched_mood_finishes_normally':True,'fixture':'in-memory live actor profile; restored; no table edits; diagnostic Ready invocation only'}
  check('live_customer_profile_and_mood_mapping',live_profile)
  def score_contract():
   records=[]
   for matches in itertools.product([False,True],repeat=3):
-   args=tuple('' if x else 'nonmatching-isolated-fixture' for x in matches)
+   args=tuple(value if match else 'nonmatching-isolated-fixture' for value,match in zip(('Quiet','Jazz','Reflective'),matches))
    score=manager.call_method('CalculateLPScore',args=args);assert score==sum(matches)
    before=observer.get_editor_property('Scores');manager.call_method('EvaluateLP',args=(*args,['fixture-only']))
    assert observer.get_editor_property('Scores')==before+1;assert observer.get_editor_property('LastScore')==score
-   assert manager.get_editor_property('MaxScore')==3
+   assert manager.get_editor_property('MaxScore')==0
    records.append({'matches':matches,'score':score,'output':observer.get_editor_property('LastScore')})
   manager.call_method('EvaluateLP',args=('x','x','x',[]));assert manager.get_editor_property('MaxScore')==0
-  return {'cases':records,'maximum_assignment_repaired':True,'limitation':'AvailableLPs elements are unused by existing scaffold. Blank candidate inputs yield 3; this is not a meaningful catalogue maximum or qualitative evaluation.'}
+  return {'cases':records,'maximum_assignment_repaired':True,'limitation':'AvailableLPs remains unused by the existing scaffold; MaxScore is not used for presentation. Three explicit profile comparisons produce 0-3.'}
  check('raw_score_output_all_eight_combinations',score_contract)
  def selection_guards():
   observed=[]
@@ -512,20 +515,28 @@ def run():
    interact(shelves[0]);interact(shelves[0]);interact(shelves[1]);interact(tt)
    assert len(widgets(SU))==1 and not widgets(TU)
    click(widgets(SU)[0],f'BTN_LP0{i+1}');assert not widgets(SU);assert not pc.get_editor_property('show_mouse_cursor');assert tt.get_editor_property('HasRecord')
-   record=tt.get_editor_property('CurrentRecord').export_text();assert f'Test_record_0{i+1}' in record;observed.append(record)
+   record=tt.get_editor_property('CurrentRecord').export_text();assert f'RS00{i+1}' in record
+   assert flow.get_editor_property('RawScoreAvailable') and flow.get_editor_property('RawRecommendationScore')==[3,2,0][i]
+   observed.append(record)
   return observed
  check('selection_ownership_all_records_and_modals',selection_guards)
  def optional_score():
   import re
-  assert not flow.get_editor_property('RawScoreAvailable')
-  flow.call_method('EvaluateRecordScore',args=('fixture-mood','fixture-preference','fixture-personality'))
-  assert not flow.get_editor_property('RawScoreAvailable'), 'Blank customer inputs must remain unavailable'
+  assert flow.get_editor_property('RawScoreAvailable')
+  flow.call_method('EvaluateRecordScore',args=('','Jazz','Reflective'))
+  assert not flow.get_editor_property('RawScoreAvailable'), 'Blank record inputs must remain unavailable'
   profile=manager.get_editor_property('CurrentCustomer');original=profile.export_text()
   original_mood=manager.get_editor_property('CurrentMood')
   fixture=original
   for name,value in [('Personality','fixture-personality'),('MusicPreference','fixture-preference')]:
    fixture=re.sub(r'('+name+r'_[A-Za-z0-9_]+)=\"[^\"]*\"',lambda m:m[1]+'="'+value+'"',fixture)
   try:
+   blank=original
+   for key in ('Personality','MusicPreference'):
+    blank=re.sub(r'('+key+r'_[A-Za-z0-9_]+)=\"[^\"]*\"',lambda match:match[1]+'=""',blank)
+   profile.import_text(blank);observer.call_method('SetScoringProfileFixture',args=(manager,profile,'Quiet'))
+   flow.call_method('EvaluateRecordScore',args=('Quiet','Jazz','Reflective'))
+   assert not flow.get_editor_property('RawScoreAvailable'), 'Blank customer inputs must remain unavailable'
    profile.import_text(fixture);observer.call_method('SetScoringProfileFixture',args=(manager,profile,'fixture-mood'))
    observations=[]
    for inputs,expected in [(('fixture-mood','fixture-preference','fixture-personality'),3),
@@ -541,7 +552,7 @@ def run():
    assert not flow.get_editor_property('RawScoreAvailable'), 'Unsolicited output must not certify missing inputs'
    flow.call_method('EvaluateRecordScore',args=('fixture-mood','other','other'))
    flow.call_method('HandleRecordSelected',args=(tt.get_editor_property('CurrentRecord'),))
-   assert not flow.get_editor_property('RawScoreAvailable'), 'Record reselection kept a stale score'
+   assert flow.get_editor_property('RawScoreAvailable') and flow.get_editor_property('RawRecommendationScore')==0, 'Record reselection did not recompute its own score'
    flow.call_method('EvaluateRecordScore',args=('fixture-mood','other','other'))
    return {'cases':observations,'limit':'In-memory explicit scoring/profile fixtures; no authored mapping or qualitative meaning.'}
   finally:
@@ -563,8 +574,8 @@ def run():
   assert widgets(RU)==[result];assert observer.get_editor_property('Completions')==initial+1
   interact(tt);interact(shelves[0]);assert not widgets(TU) and not widgets(SU)
   assert pc.get_editor_property('show_mouse_cursor')
-  assert str(result.get_editor_property('RecordID').get_text())=='Test_record_03'
-  assert str(result.get_editor_property('ScoreStatus').get_text())=='Score: 1'
+  assert str(result.get_editor_property('RecordID').get_text())=='RS003'
+  assert str(result.get_editor_property('ScoreStatus').get_text()).startswith('POOR MATCH')
   flow.call_method('EvaluateRecordScore',args=('late','late','late'))
   manager.call_method('EvaluateLP',args=('late','late','late',[]))
   assert flow.get_editor_property('RawScoreAvailable') and flow.get_editor_property('RawRecommendationScore')==1
@@ -645,7 +656,7 @@ def run():
    audio=a.get_editor_property('PlaybackAudio');assert audio and audio.is_playing(),'Audio device did not start the diagnostic sound'
    assert not a.get_editor_property('CompletionSent');assert a.get_editor_property('TurntableStep')==5
    # The owned record must remain unchanged until real audio ends.
-   other=tt.get_editor_property('CurrentRecord');other.import_text(original.replace('Test_record_03','replacement-fixture'))
+   other=tt.get_editor_property('CurrentRecord');other.import_text(original.replace('RS003','replacement-fixture'))
    before_components=component_state(a)
    a.call_method('SetRecord',args=(other,));assert 'replacement-fixture' not in a.get_editor_property('CurrentRecord').export_text()
    assert component_state(a)==before_components, 'Rejected replacement reset active components'

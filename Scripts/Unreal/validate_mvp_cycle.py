@@ -1,6 +1,6 @@
 """Observe one contiguous production cycle; no downstream function/event injection.
 
-Existing blank authored row is used unchanged. Enhanced Input IA_Interact,
+Authored Customer01 dialogue and catalogue are used unchanged. Enhanced Input IA_Interact,
 Slate navigation/Enter and native Windows Enter messages are synthetic.
 Use --rendered --windowed for native Result Enter or --result-navigation for
 NullRHI virtual-user Tab/Enter. Both assert production focus without setting it.
@@ -22,7 +22,13 @@ SU='/Game/RecordShop/UI/RecordSelection/WBP_RecordSelect'
 TU='/Game/RecordShop/UI/Turntable/WBP_Turntable'
 RU='/Game/RecordShop/UI/Result/WBP_Result_IntegrationFallback'
 CUSTOMER='/Game/RecordShop/Characters/Customers/Common/BP_Customer'
-R={'complete':False,'pass':False,'started_utc':datetime.now(timezone.utc).isoformat(),'stages':[],'compiles':{},'fixture':'unchanged existing blank CustomerDialogue/NewRow; no generated or saved fixture','input':'synthetic Enhanced Input IA_Interact + synthetic Slate Enter; Result uses native Windows Enter or virtual Slate Tab/Enter with production focus asserted; pawn positioned for collision; customer route untouched'}
+R={'complete':False,'pass':False,'started_utc':datetime.now(timezone.utc).isoformat(),'stages':[],'compiles':{},'fixture':'production authored Customer01 content; no generated or saved fixture','input':'synthetic Enhanced Input IA_Interact + synthetic Slate Enter; Result uses native Windows Enter or virtual Slate Tab/Enter with production focus asserted; pawn positioned for collision; customer route untouched'}
+CHOICE=int(os.environ.get('MVP_RECORD_CHOICE','1'))
+assert CHOICE in (1,2,3)
+EXPECTED_SCORE={1:3,2:2,3:0}[CHOICE]
+EXPECTED_CATEGORY={1:'BEST MATCH',2:'GOOD MATCH',3:'POOR MATCH'}[CHOICE]
+R['record_choice']=CHOICE
+
 def save():OUT.write_text(json.dumps(R,indent=2,ensure_ascii=False),encoding='utf-8')
 def cls(path):return unreal.load_class(None,path+'.'+path.rsplit('/',1)[1]+'_C')
 def widgets(path):return list(unreal.WidgetLibrary.get_all_widgets_of_class(world,cls(path),True))
@@ -43,6 +49,8 @@ def request_capture(label):
 
 def capture(label):
  if '-nullrhi' in unreal.SystemLibrary.get_command_line().lower():return
+ deadline=time.monotonic()+0.3
+ while time.monotonic()<deadline:yield
  request_capture(label)
  yield from wait_frames(4)
 
@@ -180,7 +188,7 @@ def run():
  state(1);customer=flow.get_editor_property('ActiveCustomer');assert customer
  manager=flow.get_editor_property('DialogueManagerRef');assert manager.get_editor_property('CurrentLineIndex')==1
  assert manager.get_editor_property('CurrentCustomer').export_text()==customer.get_editor_property('CustomerProfile').export_text()
- assert manager.get_editor_property('CurrentMood')==''
+ assert manager.get_editor_property('CurrentMood')=='Quiet'
  assert len(widgets(DU))==1;mark('Spawn -> entry -> Ready -> StartDialogue -> UI',line_index=1)
  ready=observe_customer('ready_dialogue',True)
  mesh=customer.get_component_by_class(unreal.SkeletalMeshComponent)
@@ -220,14 +228,30 @@ def run():
  assert settled['speed_xy']<=1 and settled['presentation']['GroundSpeed']<=1, 'Customer did not stop within the 0.5 s braking budget'
  R['customer_braking']={'stopped_after_seconds':stopped_at,'max_displacement_cm':max_displacement,'displacement_budget_cm':50,'time_budget_seconds':0.5,'monotonic_decay':True,'no_renewed_acceleration':True}
  assert anim.montage_get_position(talk)>initial_position+0.1, 'Talk montage time did not advance'
+ assert pc.get_view_target()==flow.get_editor_property('DialogueCamera')
  yield from capture('dialogue')
  # Save after the player's initial gravity settling, before interaction geometry
  # changes its movement mode or location. The spawn-frame Z is not a floor pose.
  startup_location=pawn.get_actor_location();startup_rotation=pawn.get_actor_rotation();startup_control_rotation=pc.get_control_rotation()
  interaction=pawn.call_method('AddComponentByClass',args=(unreal.WidgetInteractionComponent.static_class(),False,unreal.Transform(),False))
  interaction.set_component_tick_enabled(False);interaction.activate(True)
- yield from click(widgets(DU)[0],'Next')
+ seen_lines=[]
+ while widgets(DU):
+  dialogue=widgets(DU)[0]
+  speaker=str(dialogue.get_editor_property('Speaker').get_text())
+  text=str(dialogue.get_editor_property('DialogueText').get_text())
+  assert speaker=='Mina' and text.strip()
+  seen_lines.append(text)
+  R['authored_lines_observed']=seen_lines;save()
+  assert len(seen_lines)<=4
+  yield from capture('dialogue-line-'+str(len(seen_lines)))
+  yield from click(dialogue,'Next')
+ assert len(seen_lines)==4
+ assert all(hint in text.lower() for hint,text in zip(('mina','quiet','jazz','reflective'),seen_lines))
+ assert [str(k) for k in manager.get_editor_property('DialogueList')]==['C01_Quiet_01','C01_Quiet_02','C01_Quiet_03','C01_Quiet_04']
+ R['authored_lines_observed']=seen_lines;save()
  assert not widgets(DU);state(2);assert not pc.get_editor_property('show_mouse_cursor');mark('Next -> finished -> RecordSelection')
+ assert pc.get_view_target()==pawn, 'Dialogue did not restore player camera'
  waiting=observe_customer('waiting_after_dialogue',True)
  assert waiting['speed_xy']<=1 and not waiting['presentation']['ShouldMove'], 'Customer did not wait idle after dialogue'
  assert not mesh.get_anim_instance().montage_is_playing(talk), 'Talk montage continued after dialogue close'
@@ -242,24 +266,38 @@ def run():
  shelf=unreal.GameplayStatics.get_all_actors_of_class(world,cls(SHELF))[0]
  yield from interact(shelf,SU);mark('Shelf interaction -> record selection UI')
  yield from capture('record-selection')
- yield from click(widgets(SU)[0],'BTN_LP01')
+ yield from click(widgets(SU)[0],f'BTN_LP0{CHOICE}')
  tt=unreal.GameplayStatics.get_all_actors_of_class(world,cls(TT))[0]
- assert tt.get_editor_property('HasRecord');assert 'Test_record_01' in tt.get_editor_property('CurrentRecord').export_text();assert not widgets(SU);state(3)
+ assert tt.get_editor_property('HasRecord');assert f'RS00{CHOICE}' in tt.get_editor_property('CurrentRecord').export_text();assert not widgets(SU);state(3)
+ assert flow.get_editor_property('RawScoreAvailable')
+ assert flow.get_editor_property('RawRecommendationScore')==EXPECTED_SCORE
  mark('Record selected -> shelf -> GameFlow -> Turntable.SetRecord',record=tt.get_editor_property('CurrentRecord').export_text())
  yield from interact(tt,TU);mark('Turntable interaction -> UI')
+ assert pc.get_view_target()==tt.get_editor_property('ListeningCamera')
  yield from capture('turntable-open')
  widget=widgets(TU)[0]
  for name,step in [('BTN_OpenLid',1),('BTN_PlaceRecord',2),('BTN_SelectRPM',2),('BTN_RPM33',3),('BTN_MoveTonearm',4)]:
   yield from click(widget,name);assert tt.get_editor_property('TurntableStep')==step,(name,tt.get_editor_property('TurntableStep'))
+  if name in ('BTN_OpenLid','BTN_PlaceRecord','BTN_MoveTonearm'):
+   yield from capture('motion-'+name)
+   R.setdefault('natural_turntable_motion',[]).append({'action':name,'lid_pitch':tt.get_editor_property('Lid').get_editor_property('relative_rotation').pitch,'record_z':tt.get_editor_property('Record').get_editor_property('relative_location').z,'tonearm_yaw':tt.get_editor_property('TonearmPivot').get_editor_property('relative_rotation').yaw})
+   save()
+ deadline=time.monotonic()+1.05
+ while time.monotonic()<deadline:yield
+ assert abs(tt.get_editor_property('Lid').get_editor_property('relative_rotation').pitch+70)<0.1
+ assert abs(tt.get_editor_property('Record').get_editor_property('relative_location').z-22.383362)<0.1
+ assert abs(tt.get_editor_property('TonearmPivot').get_editor_property('relative_rotation').yaw-35)<0.1
  mark('Ordered turntable setup',rpm=tt.get_editor_property('SelectedRPM'))
  yield from capture('turntable-ready')
  yield from click(widget,'BTN_Play')
  assert tt.get_editor_property('TurntableStep')==5;assert tt.get_editor_property('CompletionSent');assert len(widgets(RU))==1;assert not widgets(TU);state(5)
  assert widget.get_editor_property('TurntableRef') is None
- result=widgets(RU)[0];assert str(result.get_editor_property('RecordID').get_text())=='Test_record_01'
- assert str(result.get_editor_property('ScoreStatus').get_text())=='Score: unavailable'
- mark('Audio=None deterministic completion -> Result',score_available=False,audible_playback=False)
+ result=widgets(RU)[0];assert str(result.get_editor_property('RecordID').get_text())==f'RS00{CHOICE}'
+ assert str(result.get_editor_property('ScoreStatus').get_text()).startswith(EXPECTED_CATEGORY)
+ R['result_feedback']=str(result.get_editor_property('ScoreStatus').get_text());save()
+ mark('Audio=None deterministic completion -> Result',score_available=True,score=EXPECTED_SCORE,category=EXPECTED_CATEGORY,audible_playback=False)
  yield from capture('result')
+ assert pc.get_view_target()==flow.get_editor_property('DialogueCamera'), 'Result camera was overwritten'
  yield from wait_frames(30)
  before=customer.get_actor_location();yield from continue_with_default_focus(result)
  assert not widgets(RU);assert flow.get_editor_property('ResultSubmitted');assert not pc.get_editor_property('show_mouse_cursor')
@@ -282,6 +320,7 @@ def run():
   yield
  assert any(s['route']=='exit' and s['speed_xy']>1 and s.get('presentation',{}).get('ShouldMove') for s in R['customer_observations']), 'No natural exit locomotion observed'
  state(0);no_modals();assert not pc.get_editor_property('show_mouse_cursor');assert flow.get_editor_property('DialogueWidgetRef') is None;assert flow.get_editor_property('ResultWidgetRef') is None
+ assert pc.get_view_target()==pawn, 'Result did not restore player camera'
  mark('CustomerExited -> ActiveCustomer cleared -> Explore',after_exit=str(customer.get_actor_location()))
  yield from capture('explore')
  interaction.destroy_component(pawn)
