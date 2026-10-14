@@ -122,6 +122,8 @@ def presentation_motion_checks(world, turntable_class, widget_class, pawn, recor
 
 
 def repeat_setup_checks(world, turntable_class, record, check):
+    import re
+    record.import_text(re.sub(r'(Audio_[A-Za-z0-9_]+)=(?:None|"[^"]*")', r'\1=None', record.export_text()))
     def run():
         transform = unreal.Transform(location=unreal.Vector(0, 0, 3000))
         statics = unreal.get_default_object(unreal.GameplayStatics)
@@ -144,6 +146,12 @@ def repeat_setup_checks(world, turntable_class, record, check):
             for rpm in (33, 45, 78):
                 for method in ('OpenLid', 'PlaceRecord', f'SelectRPM{rpm}', 'MoveTonearm', 'PlayRecord'):
                     actor.call_method(method)
+                assert actor.get_editor_property('PlaybackRequested')
+                assert actor.get_editor_property('PlaybackAudio') is None
+                actor.call_method('ReceiveTick', args=(0.3,))
+                assert 0 < actor.get_editor_property('TonearmMotionAlpha') < 1
+                assert actor.get_editor_property('PlaybackAudio') is None, 'Music before needle contact'
+                actor.call_method('ReceiveTick', args=(0.7,))
                 contact = stylus_contact(actor)
                 assert -0.02 <= contact['gap_cm'] <= 0.05, ('Playback stylus contact', rpm, contact)
                 assert not actor.get_editor_property('CompletionSent'), 'Silent presentation skipped physical return'
@@ -177,6 +185,7 @@ def repeat_setup_checks(world, turntable_class, record, check):
             for elapsed in (0.5, 1.9):
                 for method in ('OpenLid', 'PlaceRecord', 'SelectRPM33', 'MoveTonearm', 'PlayRecord'):
                     actor.call_method(method)
+                actor.call_method('ReceiveTick', args=(1.0,))
                 actor.call_method('ReceiveTick', args=(min(elapsed, 1.5),))
                 if elapsed > 1.5:
                     actor.call_method('ReceiveTick', args=(elapsed-1.5,))
@@ -236,7 +245,7 @@ def rotation_checks(world, turntable_class, source_record, result, save):
             record = actor.get_editor_property('CurrentRecord')
             sound = unreal.load_asset('/Engine/EditorSounds/Notifications/CompileSuccess')
             assert sound
-            text = re.sub(r'(Audio_[A-Za-z0-9_]+)=None',
+            text = re.sub(r'(Audio_[A-Za-z0-9_]+)=(?:None|"[^"]*")',
                           lambda m: m[1]+'="/Script/Engine.SoundWave\''+sound.get_path_name()+'\'"',
                           source_record.export_text())
             record.import_text(text)
@@ -275,6 +284,7 @@ def rotation_checks(world, turntable_class, source_record, result, save):
             assert abs(yaw()-initial) < 0.001, 'Rotation before playback'
             for method in ('OpenLid', 'PlaceRecord', f'SelectRPM{rpm}', 'MoveTonearm', 'PlayRecord'):
                 actor.call_method(method)
+            actor.call_method('ReceiveTick', args=(1.0,))
             audio = actor.get_editor_property('PlaybackAudio')
             assert audio and audio.is_playing()
             for seconds in (0.125, 0.25):
@@ -322,7 +332,68 @@ def rotation_checks(world, turntable_class, source_record, result, save):
             save()
 
 
+def production_audio_replay_checks(world, turntable_class, source_record, result, save):
+    """Actual project music reset/replay and fade guard; isolated, not natural E2E."""
+    import re
+    statics=unreal.get_default_object(unreal.GameplayStatics)
+    transform=unreal.Transform(location=unreal.Vector(0,0,3000))
+    scaling=unreal.SpawnActorScaleMethod.MULTIPLY_WITH_ROOT
+    actor=statics.call_method('BeginDeferredActorSpawnFromClass',args=(world,turntable_class,transform,unreal.SpawnActorCollisionHandlingMethod.ALWAYS_SPAWN,None,scaling))
+    actor=statics.call_method('FinishSpawningActor',args=(actor,transform,scaling))
+    observations=[]
+    try:
+        sound=unreal.load_asset('/Game/RecordShop/Audio/Music/RS001_Best')
+        record=actor.get_editor_property('CurrentRecord')
+        text=re.sub(r'(Audio_[A-Za-z0-9_]+)=(?:None|"[^"]*")',lambda m:m[1]+'="/Script/Engine.SoundWave\''+sound.get_path_name()+'\'"',source_record.export_text())
+        record.import_text(text)
+        previous=None
+        for repeat in range(2):
+            actor.call_method('SetRecord',args=(record,))
+            assert actor.get_editor_property('PlaybackAudio') is None
+            for method in ('OpenLid','PlaceRecord','SelectRPM33','MoveTonearm','PlayRecord'):
+                actor.call_method(method)
+            assert actor.get_editor_property('PlaybackRequested')
+            assert actor.get_editor_property('PlaybackAudio') is None
+            deadline=time.monotonic()+4
+            while actor.get_editor_property('PlaybackAudio') is None:
+                assert time.monotonic()<deadline
+                if actor.get_editor_property('TonearmMotionAlpha')<1:
+                    assert actor.get_editor_property('TurntableStep')==4
+                yield
+            audio=actor.get_editor_property('PlaybackAudio')
+            assert audio.is_playing() and audio.get_editor_property('sound')==sound
+            assert actor.get_editor_property('TonearmMotionAlpha')==1
+            assert -0.02<=stylus_contact(actor)['gap_cm']<=0.05
+            assert previous is None or audio!=previous
+            actor.call_method('PlayRecord');assert actor.get_editor_property('PlaybackAudio')==audio
+            voices=[a for a in unreal.ObjectIterator(unreal.AudioComponent) if a.is_playing() and a.get_editor_property('sound')==sound]
+            assert len(voices)==1, 'Overlapping production LP components'
+            if repeat==0:
+                until=time.monotonic()+1
+                while time.monotonic()<until:yield
+                actor.call_method('BeginTonearmReturn')
+                assert 'FADING_OUT' in str(audio.get_play_state()), str(audio.get_play_state())
+            deadline=time.monotonic()+40
+            while not actor.get_editor_property('CompletionSent'):
+                assert time.monotonic()<deadline
+                yield
+            assert actor.get_editor_property('PlaybackAudio') is None
+            assert not unreal.SystemLibrary.is_valid(audio) or not audio.is_playing()
+            assert abs(actor.get_editor_property('TonearmPivot').get_editor_property('relative_rotation').yaw)<.01
+            observations.append({'repeat':repeat+1,'sound':sound.get_path_name(),'one_component':True,'contact_before_audio':True,'completion':'early fade then physical return' if repeat==0 else 'full natural audio finished callback after reset'})
+            previous=audio
+        result['isolated']['production_music_fade_reset_replay']={'pass':True,'observations':observations,'limit':'Isolated direct Turntable commands; all natural recommendation paths are validated separately.'}
+    except Exception:
+        result['isolated']['production_music_fade_reset_replay']={'pass':False,'observations':observations,'error':traceback.format_exc()}
+    finally:
+        audio=actor.get_editor_property('PlaybackAudio')
+        if audio:audio.stop()
+        actor.destroy_actor();save()
+
+
 def rpm_ui_checks(world, pawn, turntable_class, widget_class, record, check):
+    import re
+    record.import_text(re.sub(r'(Audio_[A-Za-z0-9_]+)=(?:None|"[^"]*")',r'\1=None',record.export_text()))
     for rpm in (45, 78):
         def run(rpm=rpm):
             transform = unreal.Transform(location=unreal.Vector(0, 0, 3000))
@@ -364,7 +435,10 @@ def rpm_ui_checks(world, pawn, turntable_class, widget_class, record, check):
                 click('BTN_SelectRPM', 3)
                 assert options.get_visibility() == unreal.SlateVisibility.COLLAPSED
                 click('BTN_MoveTonearm', 4)
-                click('BTN_Play', 5)
+                click('BTN_Play', 4)
+                assert actor.get_editor_property('PlaybackRequested')
+                actor.call_method('ReceiveTick', args=(1.0,))
+                assert actor.get_editor_property('TurntableStep') == 5
                 click('BTN_Play', 5)
                 return {'events': observations, 'limit': 'OnClicked broadcasts, not mouse hit testing; Audio=None.'}
             finally:
@@ -634,12 +708,16 @@ def run():
  rpm_ui_checks(world,pawn,cls(TT),cls(TU),tt.get_editor_property('CurrentRecord'),check)
  repeat_setup_checks(world,cls(TT),tt.get_editor_property('CurrentRecord'),check)
  def completion_guards():
+  import re
+  silent=tt.get_editor_property('CurrentRecord')
+  silent.import_text(re.sub(r'(Audio_[A-Za-z0-9_]+)=(?:None|"[^"]*")',r'\1=None',silent.export_text()))
+  tt.call_method('SetRecord',args=(silent,))
   interact(tt);interact(tt);interact(shelves[0]);assert len(widgets(TU))==1 and not widgets(SU)
   w=widgets(TU)[0];initial=observer.get_editor_property('Completions')
   for name in ['BTN_Play','BTN_MoveTonearm','BTN_PlaceRecord','BTN_RPM78']:click(w,name)
   assert tt.get_editor_property('TurntableStep')==0;assert observer.get_editor_property('Completions')==initial
   for name in ['BTN_OpenLid','BTN_PlaceRecord','BTN_RPM33','BTN_MoveTonearm','BTN_Play']:click(w,name)
-  tt.call_method('ReceiveTick',args=(1.5,));tt.call_method('ReceiveTick',args=(1.2,))
+  tt.call_method('ReceiveTick',args=(1.0,));tt.call_method('ReceiveTick',args=(1.5,));tt.call_method('ReceiveTick',args=(1.2,))
   assert tt.get_editor_property('CompletionSent');assert observer.get_editor_property('Completions')==initial+1
   assert w.get_editor_property('TurntableRef') is None
   result=widgets(RU)[0]
@@ -725,11 +803,12 @@ def run():
    record=tt.get_editor_property('CurrentRecord');original=record.export_text()
    sound=unreal.load_asset('/Engine/EditorSounds/Notifications/CompileSuccess');assert sound
    import re
-   edited=re.sub(r'(Audio_[A-Za-z0-9_]+)=None',lambda m:m[1]+'="/Script/Engine.SoundWave\''+sound.get_path_name()+'\'"',original)
+   edited=re.sub(r'(Audio_[A-Za-z0-9_]+)=(?:None|"[^"]*")',lambda m:m[1]+'="/Script/Engine.SoundWave\''+sound.get_path_name()+'\'"',original)
    assert edited!=original;record.import_text(edited)
    a.call_method('SetRecord',args=(record,));observer.call_method(observe_method,args=(a,manager))
    before=observer.get_editor_property('Completions')
    for method in ['OpenLid','PlaceRecord','SelectRPM33','MoveTonearm','PlayRecord']:a.call_method(method)
+   a.call_method('ReceiveTick',args=(1.0,))
    audio=a.get_editor_property('PlaybackAudio');assert audio and audio.is_playing(),'Audio device did not start the diagnostic sound'
    assert not a.get_editor_property('CompletionSent');assert a.get_editor_property('TurntableStep')==5
    # The owned record must remain unchanged until real audio ends.
@@ -747,6 +826,7 @@ def run():
    R['isolated']['real_audio_component_callback']={'pass':True,'source':sound.get_path_name(),'completion_delta':1,'replacement_during_playback_rejected':True,'limit':'engine notification fixture only; no authored LP asset and no audible-quality claim'};save()
   except Exception:R['isolated']['real_audio_component_callback']={'pass':False,'error':traceback.format_exc()};save()
   finally:a.destroy_actor()
+  yield from production_audio_replay_checks(world,cls(TT),tt.get_editor_property('CurrentRecord'),R,save)
  R['complete']=True;R['pass']=all(x.get('pass',True) for x in R['isolated'].values());save()
 
 def tick(delta):
@@ -760,7 +840,7 @@ def tick(delta):
     unreal.EditorPythonScripting.set_keep_python_script_alive(False)
    return
   if phase['gen'] is None:phase['gen']=run()
-  assert time.monotonic()-start<150
+  assert time.monotonic()-start<240
   next(phase['gen'])
  except StopIteration:level.editor_request_end_play();phase['end']=time.monotonic()
  except Exception:R['fatal']=traceback.format_exc();R['complete']=True;save();level.editor_request_end_play();phase['end']=time.monotonic()

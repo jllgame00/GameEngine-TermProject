@@ -58,6 +58,13 @@ try:
   record['expected_score']=sum((record['Mood']==fields['Mood'],record['Genre']==fields['MusicPreference'],record['Theme']==fields['Personality']))
   records.append(record)
  assert {record['RecordID']:record['expected_score'] for record in records}=={'RS001':3,'RS002':2,'RS003':0}
+ for record in records:
+  expected={'RS001':'RS001_Best','RS002':'RS002_Good','RS003':'RS003_Poor'}[record['RecordID']]
+  assert expected in record['Audio'], record
+  sound=unreal.load_asset('/Game/RecordShop/Audio/Music/'+expected)
+  assert sound and 24 <= sound.get_editor_property('duration') <= 40
+  assert sound.get_editor_property('num_channels')==2 and not sound.get_editor_property('looping')
+  assert '/Game/RecordShop/Audio/Music/'+expected in R['packages']
  R['authored_content']={'profile':fields,'dialogue':rows,'catalogue':records,'rule':'Existing CalculateLPScore: Mood / Genre / Theme map to Mood / MusicPreference / Personality; one point each. Energy is descriptive.'}
  # Fonts must be cooked project dependencies, rather than the editor-only Korean fallback.
  font_path='/Game/RecordShop/UI/Fonts/NanumGothic_Font'

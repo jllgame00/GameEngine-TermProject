@@ -17,7 +17,13 @@ if a.result_navigation:
  wrapper.write_text('import os\nos.environ["MVP_RESULT_NAVIGATION"]="1"\n'+wrapper.read_text(encoding='utf-8'),encoding='utf-8')
 args=['C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe',str(root/'RecordShop.uproject'),'-EnablePlugins=PythonScriptPlugin,EditorScriptingUtilities','-unattended','-nosound','-nop4','-nosplash','-DDC-ForceMemoryCache','-ddc=(Local=(Type=FileSystem,Path='+str(root/'DerivedDataCache')+'))','-UserDir='+str(folder/'User'),'-abslog='+str(log)]
 if not a.rendered:args+=['-nullrhi']
-if a.audio:args.remove('-nosound')
+if a.audio:
+ args.remove('-nosound')
+ # Offscreen/unfocused validation must reach the mixer. This per-process override
+ # does not change the shipped game's focus/audio policy or saved editor settings.
+ args+=['-ini:Engine:[Audio]:UnfocusedVolumeMultiplier=1.0',
+          '-ini:EditorPerProjectUserSettings:[/Script/UnrealEd.LevelEditorPlaySettings]:SoloAudioInFirstPIEClient=True',
+          '-ini:EditorPerProjectUserSettings:[/Script/UnrealEd.LevelEditorMiscSettings]:bAllowBackgroundAudio=True']
 args+=['-run=pythonscript','-script='+str(wrapper)] if a.commandlet else ([] if a.windowed else ['-RenderOffscreen'])+['-NoLoadStartupPackages','-ExecutePythonScript='+str(wrapper)]
 (folder/(name+'-command.json')).write_text(json.dumps(args,indent=2),encoding='utf-8')
 print('START',name,flush=True)
@@ -28,6 +34,17 @@ with (folder/(name+'-stdout.txt')).open('w',encoding='utf-8') as out:
 data=json.loads(result.read_text(encoding='utf-8')) if result.exists() else {}
 summary={'exit_code':code,'exit_hex':hex(code & 0xffffffff),'complete':data.get('complete',False),'assertions_pass':data.get('pass',False),'result':str(result),'log':str(log)}
 summary.update(classify_log(log.read_text(encoding='utf-8',errors='replace') if log.exists() else ''))
+if data.get('audio_output_capture'):
+ import wave,array,math
+ capture=pathlib.Path(data['audio_output_capture'])
+ try:
+  with wave.open(str(capture),'rb') as wav:
+   assert wav.getsampwidth()==2
+   frames=wav.getnframes();rate=wav.getframerate();channels=wav.getnchannels();samples=array.array('h',wav.readframes(frames))
+  peak=max(abs(v) for v in samples)/32768; rms=math.sqrt(sum((v/32768)**2 for v in samples)/len(samples))
+  summary['audio_output']={'path':str(capture),'seconds':frames/rate,'channels':channels,'peak':peak,'rms':rms,'pass':peak>.01 and rms>.001 and peak<1}
+ except Exception as error:summary['audio_output']={'path':str(capture),'pass':False,'error':repr(error)}
+ summary['assertions_pass']=summary['assertions_pass'] and summary['audio_output']['pass']
 summary['process_pass']=code==0 and summary['complete'] and summary['assertions_pass'] and summary['gameplay_log_pass']
 (folder/(name+'-process.json')).write_text(json.dumps(summary,indent=2),encoding='utf-8')
 print(json.dumps(summary,indent=2),flush=True)

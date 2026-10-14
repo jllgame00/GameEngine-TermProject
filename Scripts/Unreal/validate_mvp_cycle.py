@@ -329,30 +329,46 @@ def run():
  assert abs(tt.get_editor_property('TonearmPivot').get_editor_property('relative_rotation').yaw-35)<0.1
  mark('Ordered turntable setup',rpm=tt.get_editor_property('SelectedRPM'))
  yield from capture('turntable-ready')
+ if os.environ.get('MVP_CAPTURE_AUDIO')=='1':
+  unreal.AudioMixerLibrary.start_recording_output(world,45)
  yield from click(widget,'BTN_Play')
- # Observe the actual silent platter demonstration and physical arm return.
+ audio=tt.get_editor_property('PlaybackAudio')
+ assert audio and audio.is_playing(), 'Selected production LP did not start'
+ sound=audio.get_editor_property('sound')
+ assert sound.get_name()=={1:'RS001_Best',2:'RS002_Good',3:'RS003_Poor'}[CHOICE]
+ assert tt.get_editor_property('TonearmMotionAlpha')==1, 'Audio began before stylus contact'
+ R['selected_audio']={'path':sound.get_path_name(),'duration':sound.get_editor_property('duration'),'component':audio.get_path_name(),'tonearm_alpha_at_start':1,'fade_state_at_start':str(audio.get_play_state())};save()
+ # Observe production audio playback and the physical arm return.
  # No completion calls or state writes supply this transition.
- deadline=time.monotonic()+8
+ deadline=time.monotonic()+50
  captured=set()
  while not widgets(RU):
   assert time.monotonic()<deadline, 'Playback/arm return did not naturally reach Result'
   remaining=tt.get_editor_property('SilentPlaybackRemaining')
   returning=tt.get_editor_property('TonearmReturnAlpha')
-  label='silent-platter-playing' if remaining>0 else ('tonearm-lifting' if returning<0.35 else 'tonearm-returning')
+  playing=audio.is_playing() if unreal.SystemLibrary.is_valid(audio) else False
+  label='selected-LP-playing' if playing and returning>=1 else ('tonearm-lifting' if returning<0.35 else 'tonearm-returning')
   rot=tt.get_editor_property('TonearmPivot').get_editor_property('relative_rotation')
-  R.setdefault('natural_playback_motion',[]).append({'stage':label,'roll':rot.roll,'yaw':rot.yaw,'return_alpha':returning,'remaining':remaining})
-  visible_phase = remaining > 0 or (0.25 <= returning < 0.35) or (0.6 <= returning < 0.85)
+  R.setdefault('natural_playback_motion',[]).append({'stage':label,'roll':rot.roll,'yaw':rot.yaw,'return_alpha':returning,'remaining':remaining,'audio_playing':playing})
+  visible_phase = (playing and returning>=1) or (0.25 <= returning < 0.35) or (0.6 <= returning < 0.85)
   if label not in captured and visible_phase:
    captured.add(label);request_capture(label)
   yield
- assert {'silent-platter-playing','tonearm-lifting','tonearm-returning'} <= captured
+ assert {'selected-LP-playing','tonearm-lifting','tonearm-returning'} <= captured
  assert min(s['roll'] for s in R['natural_playback_motion']) < -12, 'No visible arm lift'
  assert tt.get_editor_property('TurntableStep')==5;assert tt.get_editor_property('CompletionSent');assert len(widgets(RU))==1;assert not widgets(TU);state(5)
  assert widget.get_editor_property('TurntableRef') is None
  result=widgets(RU)[0];assert str(result.get_editor_property('RecordID').get_text())==f'RS00{CHOICE}'
  assert str(result.get_editor_property('ScoreStatus').get_text()).startswith(EXPECTED_CATEGORY)
  R['result_feedback']=str(result.get_editor_property('ScoreStatus').get_text());save()
- mark('Audio=None deterministic completion -> Result',score_available=True,score=EXPECTED_SCORE,category=EXPECTED_CATEGORY,audible_playback=False)
+ assert tt.get_editor_property('PlaybackAudio') is None
+ assert not unreal.SystemLibrary.is_valid(audio) or not audio.is_playing()
+ mark('Selected LP natural audio completion -> arm lift/return -> Result',score_available=True,score=EXPECTED_SCORE,category=EXPECTED_CATEGORY,audio_component_played=True)
+ if os.environ.get('MVP_CAPTURE_AUDIO')=='1':
+  deadline=time.monotonic()+1
+  while time.monotonic()<deadline:yield
+  unreal.AudioMixerLibrary.stop_recording_output(world,unreal.AudioRecordingExportType.WAV_FILE,OUT.stem+'-master-output',str(OUT.parent))
+  R['audio_output_capture']=str(OUT.with_name(OUT.stem+'-master-output.wav'));save()
  yield from capture('result')
  assert pc.get_view_target()==flow.get_editor_property('DialogueCamera'), 'Result camera was overwritten'
  for _ in range(30):
