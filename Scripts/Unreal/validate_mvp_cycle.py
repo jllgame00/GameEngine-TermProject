@@ -4,6 +4,8 @@ Authored Customer01 dialogue and catalogue are used unchanged. Enhanced Input IA
 Slate navigation/Enter and native Windows Enter messages are synthetic.
 Use --rendered --windowed for native Result Enter or --result-navigation for
 NullRHI virtual-user Tab/Enter. Both assert production focus without setting it.
+Set MVP_NATIVE_UI=1 with --rendered --windowed for native Enter on EVERY button,
+without a WidgetInteraction component. MVP_NATIVE_SIZE defaults to 1280x720.
 Pawn teleport supplies interaction geometry; the settled pre-interaction player
 viewpoint is restored after Result Continue for exit evidence.
 customer navigation, gameplay state, completion and exit are never manipulated.
@@ -14,6 +16,7 @@ from datetime import datetime,timezone
 import unreal
 ROOT=Path(unreal.Paths.project_dir());sys.path.insert(0,str(ROOT/'Scripts/Unreal'))
 OUT=Path(os.environ['MVP_RESULT'])
+NATIVE_UI=os.environ.get('MVP_NATIVE_UI')=='1'
 FLOW='/Game/RecordShop/Core/Flow/BP_GameFlowManager'
 TT='/Game/RecordShop/Interaction/Actors/BP_Turntable'
 SHELF='/Game/RecordShop/Interaction/Actors/BP_RecordShelf'
@@ -26,8 +29,20 @@ R={'complete':False,'pass':False,'started_utc':datetime.now(timezone.utc).isofor
 CHOICE=int(os.environ.get('MVP_RECORD_CHOICE','1'))
 assert CHOICE in (1,2,3)
 EXPECTED_SCORE={1:3,2:2,3:0}[CHOICE]
-EXPECTED_CATEGORY={1:'BEST MATCH',2:'GOOD MATCH',3:'POOR MATCH'}[CHOICE]
+EXPECTED_CATEGORY={1:'최고의 선택',2:'좋은 선택',3:'아쉬운 선택'}[CHOICE]
+OWNER_LINES=[
+ '젊은 친구, 자네도 그렇게 생각하나?',
+ '아니, 요즘 화제가 되는 사회적 이슈 모르나? 요새 젊은이들로부터 취업이 예전만큼 되지 않는다는 얘기를 들었네.',
+ '정말 버르장머리 없는 소리이지 않나?',
+ '자기네들이 열심히 하지 않는 것은 생각하지 않고 남탓만 할 줄 알고, 하여간 요즘 얘들은 말이야, 쯧쯧.',
+ '어이, 젊은 친구, 빨리 음악이나 틀어보게. 지금 내 마음 속 불쾌감을 씻어내야 겠어.',
+]
 R['record_choice']=CHOICE
+if NATIVE_UI:
+ assert os.environ.get('MVP_RESULT_NAVIGATION')!='1', 'Native UI requires --rendered --windowed'
+ assert '-renderoffscreen' not in unreal.SystemLibrary.get_command_line().lower()
+ assert '-nullrhi' not in unreal.SystemLibrary.get_command_line().lower()
+ R['input']='synthetic Enhanced Input IA_Interact and native Windows Enter for every UI button; ordinary button focus assigned by test, Result production focus asserted without correction; no WidgetInteraction component; pawn positioned for collision; customer route untouched'
 
 def save():OUT.write_text(json.dumps(R,indent=2,ensure_ascii=False),encoding='utf-8')
 def cls(path):return unreal.load_class(None,path+'.'+path.rsplit('/',1)[1]+'_C')
@@ -86,20 +101,53 @@ def observe_customer(route,force=False):
  return sample
 def click(widget,name):
  button=widget.get_editor_property(name)
- interaction.set_focus(button)
+ if not NATIVE_UI:interaction.set_focus(button)
  button.set_keyboard_focus()
  yield from wait_frames()
+ if NATIVE_UI:
+  yield from native_enter()
+  R.setdefault('ui_inputs',[]).append({'button':name,'pathway':'synthetic Windows Enter -> native Slate keyboard user -> focused SButton -> OnClicked; test button focus assigned; no WidgetInteraction component'});save()
+  return
  key=unreal.Key();key.import_text('Enter')
  assert interaction.press_and_release_key(key),'Slate Enter not handled for '+name
  yield from wait_frames()
  R.setdefault('ui_inputs',[]).append({'button':name,'pathway':'Slate Enter -> focused SButton -> OnClicked'});save()
 
+def native_window():
+ import ctypes
+ from ctypes import wintypes
+ user32=ctypes.WinDLL('user32',use_last_error=True)
+ callback_type=ctypes.WINFUNCTYPE(wintypes.BOOL,wintypes.HWND,wintypes.LPARAM)
+ user32.EnumWindows.argtypes=[callback_type,wintypes.LPARAM]
+ user32.GetWindowThreadProcessId.argtypes=[wintypes.HWND,ctypes.POINTER(wintypes.DWORD)]
+ user32.GetWindowTextW.argtypes=[wintypes.HWND,wintypes.LPWSTR,ctypes.c_int]
+ windows=[]
+ @callback_type
+ def visit(hwnd,param):
+  pid=wintypes.DWORD();user32.GetWindowThreadProcessId(hwnd,ctypes.byref(pid))
+  if pid.value==os.getpid():
+   title=ctypes.create_unicode_buffer(512);user32.GetWindowTextW(hwnd,title,512)
+   if title.value.startswith('RecordShop - '):windows.append((hwnd,title.value))
+  return True
+ user32.EnumWindows(visit,0)
+ assert len(windows)==1,windows
+ return user32,windows[0]
+
+def native_enter():
+ import ctypes
+ from ctypes import wintypes
+ user32,(hwnd,title)=native_window()
+ user32.PostMessageW.argtypes=[wintypes.HWND,wintypes.UINT,wintypes.WPARAM,wintypes.LPARAM]
+ user32.PostMessageW.restype=wintypes.BOOL
+ assert user32.PostMessageW(hwnd,0x0100,0x0D,1 | (0x1C << 16)),ctypes.get_last_error()
+ yield from wait_frames(2)
+ assert user32.PostMessageW(hwnd,0x0101,0x0D,1 | (0x1C << 16) | (3 << 30)),ctypes.get_last_error()
+ yield from wait_frames()
+
 def continue_with_default_focus(result):
  # WidgetInteraction uses a separate Slate virtual user. To exercise the actual
  # PlayerController keyboard focus, post Windows key messages to this editor's
  # window. Do not set focus, activate windows, or call any button/gameplay handler.
- import ctypes
- from ctypes import wintypes
  button=result.get_editor_property('Continue')
  assert button.has_keyboard_focus(), 'Production did not focus Result Continue'
  assert button.has_user_focus(pc), 'Continue lacks owning player focus'
@@ -114,31 +162,10 @@ def continue_with_default_focus(result):
   yield from wait_frames()
   R.setdefault('ui_inputs',[]).append({'button':'Continue','pathway':'synthetic Slate virtual-user Tab/Enter -> navigation -> OnClicked; native player default focus separately asserted'})
   save();return
- user32=ctypes.WinDLL('user32',use_last_error=True)
- callback_type=ctypes.WINFUNCTYPE(wintypes.BOOL,wintypes.HWND,wintypes.LPARAM)
- user32.EnumWindows.argtypes=[callback_type,wintypes.LPARAM]
- user32.GetWindowThreadProcessId.argtypes=[wintypes.HWND,ctypes.POINTER(wintypes.DWORD)]
- user32.GetWindowTextW.argtypes=[wintypes.HWND,wintypes.LPWSTR,ctypes.c_int]
- user32.PostMessageW.argtypes=[wintypes.HWND,wintypes.UINT,wintypes.WPARAM,wintypes.LPARAM]
- user32.PostMessageW.restype=wintypes.BOOL
- windows=[]
- @callback_type
- def visit(hwnd,param):
-  pid=wintypes.DWORD();user32.GetWindowThreadProcessId(hwnd,ctypes.byref(pid))
-  if pid.value==os.getpid():
-   title=ctypes.create_unicode_buffer(512);user32.GetWindowTextW(hwnd,title,512)
-   if title.value:windows.append((hwnd,title.value))
-  return True
- user32.EnumWindows(visit,0)
- candidates=[(hwnd,title) for hwnd,title in windows if title.startswith('RecordShop - ')]
- assert len(candidates)==1,windows
- hwnd,title=candidates[0]
+ user32,(hwnd,title)=native_window()
  R['result_default_focus']={'keyboard_focus':True,'owning_player_focus':True,'test_focus_correction':False,'window':title}
  save()
- assert user32.PostMessageW(hwnd,0x0100,0x0D,1 | (0x1C << 16)),ctypes.get_last_error()
- yield from wait_frames(2)
- assert user32.PostMessageW(hwnd,0x0101,0x0D,1 | (0x1C << 16) | (3 << 30)),ctypes.get_last_error()
- yield from wait_frames()
+ yield from native_enter()
  R.setdefault('ui_inputs',[]).append({'button':'Continue','pathway':'synthetic Windows Enter messages -> Slate keyboard user -> production-focused SButton -> OnClicked; no test-side focus assignment'})
  save()
 def interact(actor,path):
@@ -167,6 +194,18 @@ for path in [FLOW,TT,SHELF,'/Game/DialogueManager',DU,SU,TU,RU,CUSTOMER,'/Game/R
 assert all(R['compiles'].values())
 R['dialogue_rows']=json.loads(unreal.DataTableFunctionLibrary.export_data_table_to_json_string(unreal.load_asset('/Game/CustomerDialogue')));save()
 assert level.load_level('/Game/RecordShop/Maps/Greybox/L_RecordShop_Greybox')
+if NATIVE_UI:
+ import ctypes
+ from ctypes import wintypes
+ user32,(hwnd,title)=native_window()
+ user32.ShowWindow.argtypes=[wintypes.HWND,ctypes.c_int]
+ user32.SetWindowPos.argtypes=[wintypes.HWND,wintypes.HWND,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,wintypes.UINT]
+ user32.SetWindowPos.restype=wintypes.BOOL
+ width,height=map(int,os.environ.get('MVP_NATIVE_SIZE','1280x720').split('x'))
+ assert width>=800 and height>=600
+ user32.ShowWindow(hwnd,9)
+ assert user32.SetWindowPos(hwnd,None,0,0,width,height,0x16),ctypes.get_last_error()
+ R['native_window_size']=[width,height];save()
 unreal.EditorPythonScripting.set_keep_python_script_alive(True);level.editor_request_begin_play()
 start=time.monotonic();phase={'generator':None,'end':None}
 
@@ -233,22 +272,23 @@ def run():
  # Save after the player's initial gravity settling, before interaction geometry
  # changes its movement mode or location. The spawn-frame Z is not a floor pose.
  startup_location=pawn.get_actor_location();startup_rotation=pawn.get_actor_rotation();startup_control_rotation=pc.get_control_rotation()
- interaction=pawn.call_method('AddComponentByClass',args=(unreal.WidgetInteractionComponent.static_class(),False,unreal.Transform(),False))
- interaction.set_component_tick_enabled(False);interaction.activate(True)
+ interaction=None
+ if not NATIVE_UI:
+  interaction=pawn.call_method('AddComponentByClass',args=(unreal.WidgetInteractionComponent.static_class(),False,unreal.Transform(),False))
+  interaction.set_component_tick_enabled(False);interaction.activate(True)
  seen_lines=[]
  while widgets(DU):
   dialogue=widgets(DU)[0]
   speaker=str(dialogue.get_editor_property('Speaker').get_text())
   text=str(dialogue.get_editor_property('DialogueText').get_text())
-  assert speaker=='Mina' and text.strip()
+  assert speaker=='중년 손님' and text.strip()
   seen_lines.append(text)
   R['authored_lines_observed']=seen_lines;save()
-  assert len(seen_lines)<=4
+  assert len(seen_lines)<=len(OWNER_LINES)
   yield from capture('dialogue-line-'+str(len(seen_lines)))
   yield from click(dialogue,'Next')
- assert len(seen_lines)==4
- assert all(hint in text.lower() for hint,text in zip(('mina','quiet','jazz','reflective'),seen_lines))
- assert [str(k) for k in manager.get_editor_property('DialogueList')]==['C01_Quiet_01','C01_Quiet_02','C01_Quiet_03','C01_Quiet_04']
+ assert seen_lines==OWNER_LINES, 'Runtime dialogue differs from the owner text'
+ assert [str(k) for k in manager.get_editor_property('DialogueList')]==['C01_Quiet_%02d'%i for i in range(1,6)]
  R['authored_lines_observed']=seen_lines;save()
  assert not widgets(DU);state(2);assert not pc.get_editor_property('show_mouse_cursor');mark('Next -> finished -> RecordSelection')
  assert pc.get_view_target()==pawn, 'Dialogue did not restore player camera'
@@ -290,6 +330,23 @@ def run():
  mark('Ordered turntable setup',rpm=tt.get_editor_property('SelectedRPM'))
  yield from capture('turntable-ready')
  yield from click(widget,'BTN_Play')
+ # Observe the actual silent platter demonstration and physical arm return.
+ # No completion calls or state writes supply this transition.
+ deadline=time.monotonic()+8
+ captured=set()
+ while not widgets(RU):
+  assert time.monotonic()<deadline, 'Playback/arm return did not naturally reach Result'
+  remaining=tt.get_editor_property('SilentPlaybackRemaining')
+  returning=tt.get_editor_property('TonearmReturnAlpha')
+  label='silent-platter-playing' if remaining>0 else ('tonearm-lifting' if returning<0.35 else 'tonearm-returning')
+  rot=tt.get_editor_property('TonearmPivot').get_editor_property('relative_rotation')
+  R.setdefault('natural_playback_motion',[]).append({'stage':label,'roll':rot.roll,'yaw':rot.yaw,'return_alpha':returning,'remaining':remaining})
+  visible_phase = remaining > 0 or (0.25 <= returning < 0.35) or (0.6 <= returning < 0.85)
+  if label not in captured and visible_phase:
+   captured.add(label);request_capture(label)
+  yield
+ assert {'silent-platter-playing','tonearm-lifting','tonearm-returning'} <= captured
+ assert min(s['roll'] for s in R['natural_playback_motion']) < -12, 'No visible arm lift'
  assert tt.get_editor_property('TurntableStep')==5;assert tt.get_editor_property('CompletionSent');assert len(widgets(RU))==1;assert not widgets(TU);state(5)
  assert widget.get_editor_property('TurntableRef') is None
  result=widgets(RU)[0];assert str(result.get_editor_property('RecordID').get_text())==f'RS00{CHOICE}'
@@ -298,7 +355,10 @@ def run():
  mark('Audio=None deterministic completion -> Result',score_available=True,score=EXPECTED_SCORE,category=EXPECTED_CATEGORY,audible_playback=False)
  yield from capture('result')
  assert pc.get_view_target()==flow.get_editor_property('DialogueCamera'), 'Result camera was overwritten'
- yield from wait_frames(30)
+ for _ in range(30):
+  assert pc.get_view_target()==flow.get_editor_property('DialogueCamera'), 'Result camera changed while waiting for Continue'
+  assert result.get_editor_property('Continue').has_keyboard_focus(), 'Result lost production keyboard focus'
+  yield
  before=customer.get_actor_location();yield from continue_with_default_focus(result)
  assert not widgets(RU);assert flow.get_editor_property('ResultSubmitted');assert not pc.get_editor_property('show_mouse_cursor')
  mark('Result Continue -> FinishResult -> customer exit route',before_exit=str(before))
@@ -314,16 +374,31 @@ def run():
   assert time.monotonic()-start<150,'Exit route did not finish'
   sample=observe_customer('exit',exit_view_frames<4)
   exit_view_frames+=1
-  if not exit_captured and exit_view_frames>4 and sample and sample['speed_xy']>300:
+  if not exit_captured and exit_view_frames>4 and sample and sample['speed_xy']>100:
    exit_captured=True
    request_capture('customer-exiting')
   yield
  assert any(s['route']=='exit' and s['speed_xy']>1 and s.get('presentation',{}).get('ShouldMove') for s in R['customer_observations']), 'No natural exit locomotion observed'
+ assert max(s['speed_xy'] for s in R['customer_observations']) <= 181, 'Customer exceeded measured walking pace'
  state(0);no_modals();assert not pc.get_editor_property('show_mouse_cursor');assert flow.get_editor_property('DialogueWidgetRef') is None;assert flow.get_editor_property('ResultWidgetRef') is None
  assert pc.get_view_target()==pawn, 'Result did not restore player camera'
  mark('CustomerExited -> ActiveCustomer cleared -> Explore',after_exit=str(customer.get_actor_location()))
  yield from capture('explore')
- interaction.destroy_component(pawn)
+ if os.environ.get('MVP_WIDE_CAPTURE')=='1' and '-nullrhi' not in unreal.SystemLibrary.get_command_line().lower():
+  # Additional presentation observation AFTER the entire natural cycle. This
+  # temporary camera is never saved and is not evidence of gameplay progression.
+  loc=unreal.Vector(-230,-410,245)
+  transform=unreal.Transform(location=loc,rotation=unreal.MathLibrary.find_look_at_rotation(loc,unreal.Vector(30,190,120)))
+  statics=unreal.get_default_object(unreal.GameplayStatics)
+  scaling=unreal.SpawnActorScaleMethod.MULTIPLY_WITH_ROOT
+  camera=statics.call_method('BeginDeferredActorSpawnFromClass',args=(world,unreal.CameraActor.static_class(),transform,unreal.SpawnActorCollisionHandlingMethod.ALWAYS_SPAWN,None,scaling))
+  camera=statics.call_method('FinishSpawningActor',args=(camera,transform,scaling))
+  camera.get_component_by_class(unreal.CameraComponent).set_field_of_view(85)
+  pc.set_view_target_with_blend(camera,0)
+  yield from capture('wide-store-diagnostic-camera')
+  pc.set_view_target_with_blend(pawn,0);camera.destroy_actor()
+  R.setdefault('viewpoint_observations',[]).append({'stage':'wide-store','provenance':'Temporary diagnostic camera after completed natural Explore; restored player view; no asset saves or gameplay state changes'})
+ if interaction:interaction.destroy_component(pawn)
  R['pass']=True;R['complete']=True;save()
 
 def tick(delta):
@@ -332,7 +407,10 @@ def tick(delta):
  try:
   if phase['end'] is not None:
    if time.monotonic()-phase['end']>3:
-    unreal.unregister_slate_post_tick_callback(handle);unreal.SystemLibrary.quit_editor()
+    unreal.unregister_slate_post_tick_callback(handle)
+    # Return shutdown ownership to -ExecutePythonScript so its Slate notification
+    # is released before the engine's core ticker/internationalization teardown.
+    unreal.EditorPythonScripting.set_keep_python_script_alive(False)
    return
   if phase['generator'] is None:phase['generator']=run()
   assert time.monotonic()-start<180,'Cycle timeout'

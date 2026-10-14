@@ -17,6 +17,40 @@ def component_state(actor):
     return result
 
 
+def stylus_contact(actor):
+    """Measure cartridge clearance against actual LOD0 record triangles in world cm.
+
+    Catches hovering/penetration even when the configured arm angle is reached.
+    The canonical tonearm cartridge occupies local Y > 45 cm.
+    """
+    arm = actor.get_editor_property('Tonearm')
+    record = actor.get_editor_property('Record')
+    vertices, *_ = unreal.ProceduralMeshLibrary.get_section_from_static_mesh(
+        arm.get_editor_property('static_mesh'), 0, 0)
+    distal = [unreal.MathLibrary.transform_location(arm.get_world_transform(), v)
+              for v in vertices if v.y > 45]
+    assert distal, 'Canonical cartridge geometry missing'
+    tip = min(distal, key=lambda v: v.z)
+    vertices, triangles, *_ = unreal.ProceduralMeshLibrary.get_section_from_static_mesh(
+        record.get_editor_property('static_mesh'), 0, 0)
+    vertices = [unreal.MathLibrary.transform_location(record.get_world_transform(), v)
+                for v in vertices]
+    hits = []
+    for index in range(0, len(triangles), 3):
+        a, b, c = [vertices[triangles[index+j]] for j in range(3)]
+        denominator = (b.y-c.y)*(a.x-c.x)+(c.x-b.x)*(a.y-c.y)
+        if abs(denominator) < 1e-6:
+            continue
+        u = ((b.y-c.y)*(tip.x-c.x)+(c.x-b.x)*(tip.y-c.y))/denominator
+        v = ((c.y-a.y)*(tip.x-c.x)+(a.x-c.x)*(tip.y-c.y))/denominator
+        w = 1-u-v
+        if min(u, v, w) >= -0.0001:
+            hits.append(u*a.z+v*b.z+w*c.z)
+    assert hits, 'Stylus is not above the playable record surface'
+    return {'tip_xyz': [tip.x, tip.y, tip.z], 'record_surface_z': max(hits),
+            'gap_cm': tip.z-max(hits)}
+
+
 def presentation_motion_checks(world, turntable_class, widget_class, pawn, record, check):
     """Direct deterministic motion checks, including interruption; not natural input."""
     def run():
@@ -46,11 +80,21 @@ def presentation_motion_checks(world, turntable_class, widget_class, pawn, recor
                 assert abs(sample(component, prop, axis)-beginning) < 0.01, method+' must begin at source start pose'
                 actor.call_method('ReceiveTick', args=(0.5,))
                 middle = sample(component, prop, axis)
-                assert abs(middle-(beginning+ending)/2) < 0.01, (method, middle)
+                expected_middle = 35 * 0.5 / 0.6 if method == 'MoveTonearm' else (beginning+ending)/2
+                assert abs(middle-expected_middle) < 0.01, (method, middle)
+                raised_roll = sample('TonearmPivot', 'relative_rotation', 'roll')
                 actor.call_method(method)
                 assert abs(sample(component, prop, axis)-middle) < 0.01, 'Repeated action rewound motion'
                 actor.call_method('ReceiveTick', args=(0.5,))
                 assert abs(sample(component, prop, axis)-ending) < 0.01, method
+                if method == 'MoveTonearm':
+                    contact = stylus_contact(actor)
+                    assert raised_roll < -12, 'Arm did not remain raised during swing'
+                    assert -0.02 <= contact['gap_cm'] <= 0.05, ('Stylus must contact record', contact)
+                    observations.append({'animated_contact': contact})
+                    actor.call_method('SettlePresentationMotion')
+                    settled_contact = stylus_contact(actor)
+                    assert abs(settled_contact['gap_cm']-contact['gap_cm']) < 0.01, 'Close/settle changed contact'
                 observations.append({'action': method, 'midpoint': middle, 'end': ending})
                 actor.call_method('SetRecord', args=(record,))
                 for previous in setup:
@@ -100,6 +144,19 @@ def repeat_setup_checks(world, turntable_class, record, check):
             for rpm in (33, 45, 78):
                 for method in ('OpenLid', 'PlaceRecord', f'SelectRPM{rpm}', 'MoveTonearm', 'PlayRecord'):
                     actor.call_method(method)
+                contact = stylus_contact(actor)
+                assert -0.02 <= contact['gap_cm'] <= 0.05, ('Playback stylus contact', rpm, contact)
+                assert not actor.get_editor_property('CompletionSent'), 'Silent presentation skipped physical return'
+                actor.call_method('ReceiveTick', args=(1.5,))
+                actor.call_method('ReceiveTick', args=(0.0,))
+                return_start = stylus_contact(actor)
+                assert abs(return_start['gap_cm']-contact['gap_cm']) < 0.01, 'Lift starts from a different contact pose'
+                actor.call_method('ReceiveTick', args=(0.42,))
+                lifted = pivot.get_editor_property('relative_rotation')
+                assert abs(lifted.yaw-35) < 0.01 and lifted.roll < -12, 'Return moved horizontally before lifting'
+                lifted_contact = stylus_contact(actor)
+                assert lifted_contact['gap_cm'] > 3, ('Stylus failed to lift clear', lifted_contact)
+                actor.call_method('ReceiveTick', args=(0.78,))
                 assert actor.get_editor_property('CompletionSent')
                 before = component_state(actor)
                 assert before['Record']['visible']
@@ -107,13 +164,28 @@ def repeat_setup_checks(world, turntable_class, record, check):
                 assert component_state(actor) == before, 'Audio=None must not keep spinning'
                 actor.call_method('SetRecord', args=(record,))
                 after = component_state(actor)
-                observations.append({'rpm': rpm, 'before': before, 'after': after})
+                observations.append({'rpm': rpm, 'before': before, 'after': after,
+                                     'contact': contact, 'lifted_contact': lifted_contact})
                 assert after == initial, {'initial': initial, 'observations': observations}
                 assert actor.get_editor_property('TurntableStep') == 0
                 assert actor.get_editor_property('SelectedRPM') == 0
                 assert not actor.get_editor_property('CompletionSent')
                 assert actor.get_editor_property('HasRecord')
                 assert actor.get_editor_property('PlaybackAudio') is None
+            # Replacement cancels both silent rotation and an in-progress return.
+            # Later ticks must not deliver a stale completion for the new record.
+            for elapsed in (0.5, 1.9):
+                for method in ('OpenLid', 'PlaceRecord', 'SelectRPM33', 'MoveTonearm', 'PlayRecord'):
+                    actor.call_method(method)
+                actor.call_method('ReceiveTick', args=(min(elapsed, 1.5),))
+                if elapsed > 1.5:
+                    actor.call_method('ReceiveTick', args=(elapsed-1.5,))
+                actor.call_method('SetRecord', args=(record,))
+                actor.call_method('ReceiveTick', args=(10.0,))
+                assert not actor.get_editor_property('CompletionSent')
+                assert actor.get_editor_property('TurntableStep') == 0
+                assert component_state(actor) == initial
+                observations.append({'reset_during_playback_after_seconds': elapsed, 'stale_completion': False})
             return observations
         finally:
             actor.destroy_actor()
@@ -472,7 +544,7 @@ def run():
   interact(tt);interact(shelves[0]);assert widgets(DU)==[original];assert not widgets(SU) and not widgets(TU)
   assert len(flow.get_components_by_class(cls(DM)))==1
 
-  for _ in range(4):click(original,'Next')
+  for _ in range(5):click(original,'Next')
   assert not widgets(DU);assert original.get_editor_property('DialogueManagerRef') is None
   assert int(flow.get_editor_property('CurrentState').value)==2
   manager.call_method('ShowNextLine');assert int(flow.get_editor_property('CurrentState').value)==2
@@ -492,7 +564,7 @@ def run():
    assert len(manager.get_editor_property('DialogueList'))==0 and not widgets(DU)
   finally:
    profile.import_text(original);observer.call_method('SetLiveProfileFixture',args=(customer,flow,profile));flow.call_method('HandleCustomerReadyForDialogue')
-   for _ in range(4):
+   for _ in range(5):
     if widgets(DU):click(widgets(DU)[0],'Next')
   assert manager.get_editor_property('CurrentMood')=='Quiet'
   return {'typed_active_customer_profile_copied':True,'mood_from_profile':True,'unmatched_mood_finishes_normally':True,'fixture':'in-memory live actor profile; restored; no table edits; diagnostic Ready invocation only'}
@@ -500,7 +572,7 @@ def run():
  def score_contract():
   records=[]
   for matches in itertools.product([False,True],repeat=3):
-   args=tuple(value if match else 'nonmatching-isolated-fixture' for value,match in zip(('Quiet','Jazz','Reflective'),matches))
+   args=tuple(value if match else 'nonmatching-isolated-fixture' for value,match in zip(('Quiet','Jazz','Traditional'),matches))
    score=manager.call_method('CalculateLPScore',args=args);assert score==sum(matches)
    before=observer.get_editor_property('Scores');manager.call_method('EvaluateLP',args=(*args,['fixture-only']))
    assert observer.get_editor_property('Scores')==before+1;assert observer.get_editor_property('LastScore')==score
@@ -523,7 +595,7 @@ def run():
  def optional_score():
   import re
   assert flow.get_editor_property('RawScoreAvailable')
-  flow.call_method('EvaluateRecordScore',args=('','Jazz','Reflective'))
+  flow.call_method('EvaluateRecordScore',args=('','Jazz','Traditional'))
   assert not flow.get_editor_property('RawScoreAvailable'), 'Blank record inputs must remain unavailable'
   profile=manager.get_editor_property('CurrentCustomer');original=profile.export_text()
   original_mood=manager.get_editor_property('CurrentMood')
@@ -535,7 +607,7 @@ def run():
    for key in ('Personality','MusicPreference'):
     blank=re.sub(r'('+key+r'_[A-Za-z0-9_]+)=\"[^\"]*\"',lambda match:match[1]+'=""',blank)
    profile.import_text(blank);observer.call_method('SetScoringProfileFixture',args=(manager,profile,'Quiet'))
-   flow.call_method('EvaluateRecordScore',args=('Quiet','Jazz','Reflective'))
+   flow.call_method('EvaluateRecordScore',args=('Quiet','Jazz','Traditional'))
    assert not flow.get_editor_property('RawScoreAvailable'), 'Blank customer inputs must remain unavailable'
    profile.import_text(fixture);observer.call_method('SetScoringProfileFixture',args=(manager,profile,'fixture-mood'))
    observations=[]
@@ -567,6 +639,7 @@ def run():
   for name in ['BTN_Play','BTN_MoveTonearm','BTN_PlaceRecord','BTN_RPM78']:click(w,name)
   assert tt.get_editor_property('TurntableStep')==0;assert observer.get_editor_property('Completions')==initial
   for name in ['BTN_OpenLid','BTN_PlaceRecord','BTN_RPM33','BTN_MoveTonearm','BTN_Play']:click(w,name)
+  tt.call_method('ReceiveTick',args=(1.5,));tt.call_method('ReceiveTick',args=(1.2,))
   assert tt.get_editor_property('CompletionSent');assert observer.get_editor_property('Completions')==initial+1
   assert w.get_editor_property('TurntableRef') is None
   result=widgets(RU)[0]
@@ -575,7 +648,7 @@ def run():
   interact(tt);interact(shelves[0]);assert not widgets(TU) and not widgets(SU)
   assert pc.get_editor_property('show_mouse_cursor')
   assert str(result.get_editor_property('RecordID').get_text())=='RS003'
-  assert str(result.get_editor_property('ScoreStatus').get_text()).startswith('POOR MATCH')
+  assert str(result.get_editor_property('ScoreStatus').get_text()).startswith('아쉬운 선택')
   flow.call_method('EvaluateRecordScore',args=('late','late','late'))
   manager.call_method('EvaluateLP',args=('late','late','late',[]))
   assert flow.get_editor_property('RawScoreAvailable') and flow.get_editor_property('RawRecommendationScore')==1
@@ -624,7 +697,11 @@ def run():
     assert interaction.press_and_release_key(escape)
     yield
     assert not widgets(path);assert not pc.get_editor_property('show_mouse_cursor')
-    if path==TU:assert w.get_editor_property('TurntableRef') is None
+    if path==TU:
+     assert w.get_editor_property('TurntableRef') is None
+     deadline=time.monotonic()+0.3
+     while time.monotonic()<deadline:yield
+     assert pc.get_view_target()==pawn, 'Escape close did not restore the player camera'
     observed.append({'widget':path,'repeat':repeat+1,'closed_by':'synthetic Slate Escape','cursor':False})
   R['isolated']['escape_reopen_and_destroy_reference_cleanup']={'pass':True,'observations':observed};save()
  except Exception:R['isolated']['escape_reopen_and_destroy_reference_cleanup']={'pass':False,'error':traceback.format_exc()};save()
@@ -677,7 +754,10 @@ def tick(delta):
  phase['busy']=True
  try:
   if phase['end'] is not None:
-   if time.monotonic()-phase['end']>3:unreal.unregister_slate_post_tick_callback(handle);unreal.SystemLibrary.quit_editor()
+   if time.monotonic()-phase['end']>3:
+    unreal.unregister_slate_post_tick_callback(handle)
+    # The Python executor must release its notification before engine shutdown.
+    unreal.EditorPythonScripting.set_keep_python_script_alive(False)
    return
   if phase['gen'] is None:phase['gen']=run()
   assert time.monotonic()-start<150
