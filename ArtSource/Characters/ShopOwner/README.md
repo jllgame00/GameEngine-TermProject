@@ -75,3 +75,25 @@ Normal player movement is limited to 210 cm/s. BS_ShopOwner_Walk uses existing
 directional walk samples at 210 cm/s and 0.70 playback rate, separately from
 Customer01's 180 cm/s tuning. The player mesh, skeleton, capsule, input,
 GameMode, and base Blender/FBX mesh sources are unchanged.
+
+
+## Cover, RPM, and contact refinement
+
+Animations/A_ShopOwner_CoverReach.fbx and A_ShopOwner_RPMAdjust.fbx export
+the added 2.2-second gestures. Both adapt the preserved contributor performance.
+CoverReach reaches in 0.35 seconds and follows the front lid edge during its
+existing one-second opening. RPMAdjust reaches the small brass control and
+turns the wrist up to 32 degrees before recovering. All three accepted RPM
+handlers use this gesture; RPM selection still belongs to BP_Turntable.
+
+RecordReach and TonearmReach retain their torso/shoulder performance and timing.
+Contact poses orient the fingers toward the surface instead of using the
+upward-pointing fax hand pose. A two-bone solve was baked into ordinary
+upper-arm/forearm/hand keys with Unreal AnimDataController. This is offline
+authoring, not runtime IK; the rig and bone lengths are unchanged. Updated
+FBX exports contain those keys.
+
+All four montages use DefaultSlot. Accepted gameplay actions trigger presentation;
+montage timing never completes a Turntable state. Existing close/reset/result
+cleanup cancels all four gestures. No counter, table, or Turntable height changed.
+The production map adds only a small collision-free RPM knob and mark.

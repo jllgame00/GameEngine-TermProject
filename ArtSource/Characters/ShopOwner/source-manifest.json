@@ -95,14 +95,24 @@
     {
       "path": "Animations/A_ShopOwner_RecordReach.fbx",
       "bytes": 1132688,
-      "sha256": "9f97e7713808afdee8b872babee04ff26efda9890742e54dc21a1105bee38225",
+      "sha256": "e46b2448a2e951adbcf6c708e11ec4f4510554204c54b367b3661b67e77135cc",
       "role": "Supported Unreal export of derived production reach/recovery clip; contributor SendingFax adaptation"
     },
     {
       "path": "Animations/A_ShopOwner_TonearmReach.fbx",
       "bytes": 1132688,
-      "sha256": "b6eb6167ae20a332514469126e31112f05d04a72ffb72b7e0d66151a797879cf",
+      "sha256": "8453025862ae71137a46164a07fe29335cfe97e13e224542c01e36bbf9adb8c5",
       "role": "Supported Unreal export of derived production reach/recovery clip; contributor SendingFax adaptation"
+    },
+    {
+      "path": "Animations/A_ShopOwner_CoverReach.fbx",
+      "bytes": 1132688,
+      "sha256": "8d757fd4275cbd762713117d6691463e1fa59ee7bffe66dc1ef8fb0a3213359f"
+    },
+    {
+      "path": "Animations/A_ShopOwner_RPMAdjust.fbx",
+      "bytes": 1132672,
+      "sha256": "1f5f8fd2161e0fc3b3e1bc91ac45f12653db0ebb34b2ec416443073789129b51"
     }
   ],
   "historical_files": [
@@ -494,13 +504,46 @@
     "duration_seconds": 2.2,
     "source_peak_seconds": {
       "RecordReach": 3.5,
-      "TonearmReach": 3.35
+      "TonearmReach": 3.35,
+      "CoverReach": 3.35,
+      "RPMAdjust": 3.35
     },
     "hold_seconds": 0.2,
-    "authoring": "UE 5.8 AnimDataController supported keys; smooth source-time reach/hold/recovery. Tonearm right arm rests.",
+    "authoring": "UE5.8 AnimDataController FK keys adapted from preserved SendingFax source. Original torso/shoulder performance retained. Offline two-bone contact solve plus palm orientation; no runtime IK. Cover follows actual lid edge; RPM has up to32deg wrist yaw twist.",
     "runtime_ik": false,
     "player_walk_cm_s": 210,
     "walk_sample_play_rate": 0.7,
-    "mesh_blend_fbx_unchanged": true
+    "mesh_blend_fbx_unchanged": true,
+    "micro_polish": {
+      "cover_reach_seconds": 0.35,
+      "other_reach_seconds": 0.95,
+      "recovery_end_seconds": 2.2,
+      "rpm_wrist_twist_degrees": 32,
+      "runtime_ik": false,
+      "table_turntable_z_delta_cm": 0,
+      "contact_wrist_component_cm": {
+        "RecordReach_left": [
+          20,
+          50,
+          114.8
+        ],
+        "RecordReach_right": [
+          -12,
+          50,
+          114.8
+        ],
+        "TonearmReach_left": [
+          30,
+          48,
+          114
+        ],
+        "RPMAdjust_left": [
+          35,
+          37,
+          114.2
+        ]
+      },
+      "cover_contact": "Existing lid local front edge (-24,-33.75,15); finger approaches edge. Mechanical open timing remains authoritative."
+    }
   }
 }
