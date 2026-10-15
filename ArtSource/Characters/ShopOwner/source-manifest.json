@@ -91,6 +91,18 @@
       "path": "Textures/T_ShopOwner_ORM.png",
       "bytes": 2899893,
       "sha256": "0093ce612e6b88899fc10fca9c57709c15a25d1a8e72cc104e0176c1b56edb01"
+    },
+    {
+      "path": "Animations/A_ShopOwner_RecordReach.fbx",
+      "bytes": 1132688,
+      "sha256": "9f97e7713808afdee8b872babee04ff26efda9890742e54dc21a1105bee38225",
+      "role": "Supported Unreal export of derived production reach/recovery clip; contributor SendingFax adaptation"
+    },
+    {
+      "path": "Animations/A_ShopOwner_TonearmReach.fbx",
+      "bytes": 1132688,
+      "sha256": "b6eb6167ae20a332514469126e31112f05d04a72ffb72b7e0d66151a797879cf",
+      "role": "Supported Unreal export of derived production reach/recovery clip; contributor SendingFax adaptation"
     }
   ],
   "historical_files": [
@@ -473,5 +485,22 @@
     "Blender shader is a preview approximation; no automatic production reimport is implied.",
     "Animation FBX contains the exported baked sequence, not Unreal montage timing, AnimBP, IK, physics or gameplay. Those remain in Content.",
     "Official FBX material metadata retains unavailable contributor texture paths. Portable texture linkage is supplied by the packed Blender material and Textures/ PNG files; raw FBX alone does not embed those images."
-  ]
+  ],
+  "reach_adaptation": {
+    "source": "/Game/RecordShop/Animation/Player/Sequences/A_ShopOwner_SendingFax_01",
+    "source_preserved": true,
+    "frames": 132,
+    "fps": 60,
+    "duration_seconds": 2.2,
+    "source_peak_seconds": {
+      "RecordReach": 3.5,
+      "TonearmReach": 3.35
+    },
+    "hold_seconds": 0.2,
+    "authoring": "UE 5.8 AnimDataController supported keys; smooth source-time reach/hold/recovery. Tonearm right arm rests.",
+    "runtime_ik": false,
+    "player_walk_cm_s": 210,
+    "walk_sample_play_rate": 0.7,
+    "mesh_blend_fbx_unchanged": true
+  }
 }

@@ -136,7 +136,9 @@ def owner_placement_checks(world, turntable_class, pawn, record, check):
         anim = mesh.get_anim_instance()
         montage = unreal.load_asset('/Game/RecordShop/Animation/Player/Montages/AM_ShopOwner_PlaceRecord')
         try:
-            pawn.set_actor_location_and_rotation(unreal.Vector(0, -80, 3000),
+            # Reproduce owner feedback: accepted placement from an oblique
+            # approach must not silently omit the montage outside the old 24cm gate.
+            pawn.set_actor_location_and_rotation(unreal.Vector(45, -80, 3000),
                 unreal.Rotator(pitch=0, yaw=90, roll=0), False, True)
             actor.call_method('SetRecord', args=(record,))
             actor.call_method('PlaceRecord')

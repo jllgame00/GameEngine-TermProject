@@ -99,13 +99,26 @@ try:
  assert player_component.get_editor_property('anim_class').get_name()=='ABP_ShopOwner_C'
  owner_anim=unreal.load_asset('/Game/RecordShop/Animation/Player/ABP_ShopOwner')
  ik_nodes=[n for n in unreal.BlueprintGraphEditor.get_graph_editor_by_name(owner_anim,'AnimGraph').list_all_nodes() if n.get_class().get_name()=='AnimGraphNode_TwoBoneIK']
- assert len(ik_nodes)==1 and list(ik_nodes[0].find_input_pin('Alpha').list_connected_pins())
+ assert len(ik_nodes)==1 and not list(ik_nodes[0].find_input_pin('Alpha').list_connected_pins())
+ assert float(ik_nodes[0].find_input_pin('Alpha').get_pin_value()) == 0, 'Old hand-only IK must not override the authored reach'
  assert unreal.get_default_object(owner_anim.generated_class()).get_editor_property('TonearmHandAlpha')==0
  assert all('/Game/RecordShop/Animation/Player/Montages/'+name in R['packages'] for name in ('AM_ShopOwner_PlaceRecord','AM_ShopOwner_HandInteraction'))
  assert not player_component.get_editor_property('override_materials'), 'Old player materials override PR14 textures'
  assert player.get_component_by_class(unreal.CapsuleComponent).get_unscaled_capsule_half_height()==90
  assert player.get_component_by_class(unreal.CapsuleComponent).get_unscaled_capsule_radius()==35
- assert player.get_component_by_class(unreal.CharacterMovementComponent).max_walk_speed==600
+ assert player.get_component_by_class(unreal.CharacterMovementComponent).max_walk_speed==210
+ owner_walk=unreal.load_asset('/Game/RecordShop/Animation/Player/BS_ShopOwner_Walk')
+ owner_samples=[s for s in owner_walk.get_editor_property('sample_data') if '_Walk_' in s.get_editor_property('animation').get_name()]
+ assert len(owner_samples)==9 and all(abs(s.get_editor_property('sample_value').y-210)<.01 and abs(s.get_editor_property('rate_scale')-.7)<.001 for s in owner_samples)
+ assert owner_walk.get_path_name().split('.')[0] in R['packages']
+ for name in ('RecordReach','TonearmReach'):
+  reach=unreal.load_asset('/Game/RecordShop/Animation/Player/Sequences/A_ShopOwner_'+name)
+  assert abs(reach.get_editor_property('sequence_length')-2.2)<.01
+  assert reach.get_editor_property('skeleton')==player_mesh.get_editor_property('skeleton')
+  montage_name='PlaceRecord' if name=='RecordReach' else 'HandInteraction'
+  montage=unreal.load_asset('/Game/RecordShop/Animation/Player/Montages/AM_ShopOwner_'+montage_name)
+  assert montage.get_first_anim_reference()==reach, 'Saved montage still uses the old source window'
+  assert reach.get_path_name().split('.')[0] in R['packages']
  assert not any('/Dev/' in path or 'L_CustomerAI_Test' in path or '/BP_ShopOwner' in path for path in R['packages']), 'Contributor pawn/test map became a production dependency'
  materials=player_mesh.get_editor_property('materials')
  assert len(materials)==1 and all(slot.get_editor_property('material_interface') and slot.get_editor_property('material_interface').get_editor_property('used_with_skeletal_mesh') for slot in materials)

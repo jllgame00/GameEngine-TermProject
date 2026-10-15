@@ -53,3 +53,25 @@ to overwrite the proven player or its physics/animation setup.
 
 The model is contributor work from PR #14. This recovery does not claim new
 original authorship of its geometry, textures or animation.
+
+
+## Turntable reach and walking repair
+
+`Animations/A_ShopOwner_RecordReach.fbx` and
+`Animations/A_ShopOwner_TonearmReach.fbx` are supported Unreal exports of the
+production 2.2-second reach clips. They adapt the retained SendingFax performance:
+60 fps sampling, smooth reach to source time 3.50 / 3.35 seconds, a 0.20-second
+hold, and complete recovery to the starting pose. The tonearm clip keeps the
+right shoulder/arm/hand relaxed while the left shoulder, elbow and hand reach.
+The original SendingFax sequence and FBX are unchanged. These are adaptations
+of contributor animation, not newly claimed original performances.
+
+The existing DefaultSlot remains in the final AnimGraph. Both existing
+montages use these finite clips; Turntable accepted-action guards remain
+authoritative. The old fixed hand IK is disabled (Alpha 0), so authored
+full-arm movement supplies the reach. No runtime IK is required.
+
+Normal player movement is limited to 210 cm/s. BS_ShopOwner_Walk uses existing
+directional walk samples at 210 cm/s and 0.70 playback rate, separately from
+Customer01's 180 cm/s tuning. The player mesh, skeleton, capsule, input,
+GameMode, and base Blender/FBX mesh sources are unchanged.
