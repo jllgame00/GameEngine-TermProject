@@ -121,6 +121,62 @@ def presentation_motion_checks(world, turntable_class, widget_class, pawn, recor
     check('presentation_motion_midpoints_reset_and_close', run)
 
 
+def owner_placement_checks(world, turntable_class, pawn, record, check):
+    """Direct guard/cancellation diagnostics; rendered input-driven proof is in the cycle suite."""
+    def run():
+        statics = unreal.get_default_object(unreal.GameplayStatics)
+        transform = unreal.Transform(location=unreal.Vector(0, 0, 3000))
+        scale = unreal.SpawnActorScaleMethod.MULTIPLY_WITH_ROOT
+        actor = statics.call_method('BeginDeferredActorSpawnFromClass', args=(
+            world, turntable_class, transform,
+            unreal.SpawnActorCollisionHandlingMethod.ALWAYS_SPAWN, None, scale))
+        actor = statics.call_method('FinishSpawningActor', args=(actor, transform, scale))
+        previous = pawn.get_actor_transform()
+        mesh = pawn.get_component_by_class(unreal.SkeletalMeshComponent)
+        anim = mesh.get_anim_instance()
+        montage = unreal.load_asset('/Game/RecordShop/Animation/Player/Montages/AM_ShopOwner_PlaceRecord')
+        try:
+            pawn.set_actor_location_and_rotation(unreal.Vector(0, -80, 3000),
+                unreal.Rotator(pitch=0, yaw=90, roll=0), False, True)
+            actor.call_method('SetRecord', args=(record,))
+            actor.call_method('PlaceRecord')
+            assert not anim.montage_is_active(montage), 'Rejected placement animated'
+            actor.call_method('OpenLid')
+            actor.call_method('PlaceRecord')
+            assert anim.montage_is_active(montage), 'Accepted placement lacked montage'
+            anim.montage_set_position(montage, .4)
+            actor.call_method('PlaceRecord')
+            assert abs(anim.montage_get_position(montage)-.4) < .001, 'Repeated placement restarted montage'
+            assert actor.get_editor_property('TurntableStep') == 2
+            actor.call_method('StopOwnerPresentation')
+            assert actor.get_editor_property('OwnerMontageRemaining') == 0
+            assert actor.get_editor_property('OwnerAlignmentRemaining') == 0
+            assert actor.get_editor_property('TurntableStep') == 2, 'Animation cancellation advanced gameplay'
+            hand = unreal.load_asset('/Game/RecordShop/Animation/Player/Montages/AM_ShopOwner_HandInteraction')
+            actor.call_method('SelectRPM33');actor.call_method('MoveTonearm')
+            assert anim.montage_is_active(hand), 'Accepted tonearm action lacked montage'
+            anim.montage_set_position(hand, .4)
+            actor.call_method('MoveTonearm')
+            assert abs(anim.montage_get_position(hand)-.4) < .001, 'Repeated tonearm action restarted montage'
+            actor.call_method('StopOwnerPresentation')
+            assert actor.get_editor_property('TurntableStep') == 4, 'Hand cancellation advanced gameplay'
+            actor.call_method('SetRecord', args=(record,))
+            assert actor.get_editor_property('TurntableStep') == 0
+            assert actor.get_editor_property('OwnerMontageRemaining') == 0
+            # No actor movement or animation is allowed for a far-away diagnostic turntable.
+            pawn.set_actor_location(previous.translation, False, True)
+            actor.call_method('OpenLid');actor.call_method('PlaceRecord')
+            assert actor.get_editor_property('OwnerMontageRemaining') == 0
+            return {'rejected_action': True, 'duplicate_guard': True,
+                    'interruption_independent_of_gameplay': True, 'reset': True,
+                    'far_player_does_not_fake_contact': True, 'tonearm_duplicate_and_cancel_guard': True}
+        finally:
+            actor.call_method('StopOwnerPresentation')
+            pawn.set_actor_transform(previous, False, True)
+            actor.destroy_actor()
+    check('owner_placement_guards_cancellation_and_reset', run)
+
+
 def repeat_setup_checks(world, turntable_class, record, check):
     import re
     record.import_text(re.sub(r'(Audio_[A-Za-z0-9_]+)=(?:None|"[^"]*")', r'\1=None', record.export_text()))
@@ -346,10 +402,19 @@ def production_audio_replay_checks(world, turntable_class, source_record, result
         record=actor.get_editor_property('CurrentRecord')
         text=re.sub(r'(Audio_[A-Za-z0-9_]+)=(?:None|"[^"]*")',lambda m:m[1]+'="/Script/Engine.SoundWave\''+sound.get_path_name()+'\'"',source_record.export_text())
         record.import_text(text)
-        previous=None
+        def music_components():
+            # Auto-destroyed audio can leave an expired Python proxy that cannot
+            # even be passed to IsValid. Query live UObjects afresh, retaining
+            # only scalar evidence across ticks; binding errors still fail.
+            return {component.get_path_name(): component.is_playing()
+                    for component in unreal.ObjectIterator(unreal.AudioComponent)
+                    if component.get_editor_property('sound') == sound}
+
         for repeat in range(2):
             actor.call_method('SetRecord',args=(record,))
             assert actor.get_editor_property('PlaybackAudio') is None
+            before = music_components()
+            assert not any(before.values()), ('Previous LP survived reset', before)
             for method in ('OpenLid','PlaceRecord','SelectRPM33','MoveTonearm','PlayRecord'):
                 actor.call_method(method)
             assert actor.get_editor_property('PlaybackRequested')
@@ -364,24 +429,29 @@ def production_audio_replay_checks(world, turntable_class, source_record, result
             assert audio.is_playing() and audio.get_editor_property('sound')==sound
             assert actor.get_editor_property('TonearmMotionAlpha')==1
             assert -0.02<=stylus_contact(actor)['gap_cm']<=0.05
-            assert previous is None or audio!=previous
+            audio_path = audio.get_path_name()
             actor.call_method('PlayRecord');assert actor.get_editor_property('PlaybackAudio')==audio
-            voices=[a for a in unreal.ObjectIterator(unreal.AudioComponent) if a.is_playing() and a.get_editor_property('sound')==sound]
-            assert len(voices)==1, 'Overlapping production LP components'
+            voices = music_components()
+            assert [path for path, playing in voices.items() if playing] == [audio_path], ('Overlapping production LP components', voices)
             if repeat==0:
                 until=time.monotonic()+1
                 while time.monotonic()<until:yield
                 actor.call_method('BeginTonearmReturn')
                 assert 'FADING_OUT' in str(audio.get_play_state()), str(audio.get_play_state())
+            # Do not keep or compare an AudioComponent proxy after completion.
+            audio = None
             deadline=time.monotonic()+40
             while not actor.get_editor_property('CompletionSent'):
                 assert time.monotonic()<deadline
                 yield
             assert actor.get_editor_property('PlaybackAudio') is None
-            assert not unreal.SystemLibrary.is_valid(audio) or not audio.is_playing()
+            stopped = music_components()
+            assert not any(stopped.values()), ('LP still playing after completion', stopped)
             assert abs(actor.get_editor_property('TonearmPivot').get_editor_property('relative_rotation').yaw)<.01
-            observations.append({'repeat':repeat+1,'sound':sound.get_path_name(),'one_component':True,'contact_before_audio':True,'completion':'early fade then physical return' if repeat==0 else 'full natural audio finished callback after reset'})
-            previous=audio
+            observations.append({'repeat':repeat+1,'sound':sound.get_path_name(),'one_component':True,'contact_before_audio':True,'completion':'early fade then physical return' if repeat==0 else 'full natural audio finished callback after reset',
+                                 'component_path':audio_path,'before_reset_playback':before,
+                                 'during_playback':voices,'after_completion':stopped,
+                                 'completed_component':'live and stopped' if audio_path in stopped else 'absent from live components'})
         result['isolated']['production_music_fade_reset_replay']={'pass':True,'observations':observations,'limit':'Isolated direct Turntable commands; all natural recommendation paths are validated separately.'}
     except Exception:
         result['isolated']['production_music_fade_reset_replay']={'pass':False,'observations':observations,'error':traceback.format_exc()}
@@ -705,6 +775,7 @@ def run():
    profile.import_text(original);observer.call_method('SetScoringProfileFixture',args=(manager,profile,original_mood))
  check('optional_raw_score_availability_and_propagation',optional_score)
  presentation_motion_checks(world,cls(TT),cls(TU),pawn,tt.get_editor_property('CurrentRecord'),check)
+ owner_placement_checks(world,cls(TT),pawn,tt.get_editor_property('CurrentRecord'),check)
  rpm_ui_checks(world,pawn,cls(TT),cls(TU),tt.get_editor_property('CurrentRecord'),check)
  repeat_setup_checks(world,cls(TT),tt.get_editor_property('CurrentRecord'),check)
  def completion_guards():

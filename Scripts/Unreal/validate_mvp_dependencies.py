@@ -94,11 +94,21 @@ try:
  player=unreal.get_default_object(unreal.load_class(None,'/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter.BP_ThirdPersonCharacter_C'))
  player_component=player.get_component_by_class(unreal.SkeletalMeshComponent)
  player_mesh=player_component.get_editor_property('skeletal_mesh_asset')
- assert player_mesh.get_name()=='SKM_ShopOwner'
- assert player_mesh.get_editor_property('skeleton')==unreal.load_asset('/Game/Characters/Mannequins/Meshes/SK_Mannequin')
- assert player_component.get_editor_property('anim_class').get_name()=='ABP_Unarmed_C'
+ assert player_mesh.get_name()=='SKM_ShopOwner1'
+ assert player_mesh.get_editor_property('skeleton')==unreal.load_asset('/Game/RecordShop/Characters/Player/Mesh/SKEL_ShopOwner')
+ assert player_component.get_editor_property('anim_class').get_name()=='ABP_ShopOwner_C'
+ owner_anim=unreal.load_asset('/Game/RecordShop/Animation/Player/ABP_ShopOwner')
+ ik_nodes=[n for n in unreal.BlueprintGraphEditor.get_graph_editor_by_name(owner_anim,'AnimGraph').list_all_nodes() if n.get_class().get_name()=='AnimGraphNode_TwoBoneIK']
+ assert len(ik_nodes)==1 and list(ik_nodes[0].find_input_pin('Alpha').list_connected_pins())
+ assert unreal.get_default_object(owner_anim.generated_class()).get_editor_property('TonearmHandAlpha')==0
+ assert all('/Game/RecordShop/Animation/Player/Montages/'+name in R['packages'] for name in ('AM_ShopOwner_PlaceRecord','AM_ShopOwner_HandInteraction'))
+ assert not player_component.get_editor_property('override_materials'), 'Old player materials override PR14 textures'
+ assert player.get_component_by_class(unreal.CapsuleComponent).get_unscaled_capsule_half_height()==90
+ assert player.get_component_by_class(unreal.CapsuleComponent).get_unscaled_capsule_radius()==35
+ assert player.get_component_by_class(unreal.CharacterMovementComponent).max_walk_speed==600
+ assert not any('/Dev/' in path or 'L_CustomerAI_Test' in path or '/BP_ShopOwner' in path for path in R['packages']), 'Contributor pawn/test map became a production dependency'
  materials=player_mesh.get_editor_property('materials')
- assert len(materials)==7 and all(slot.get_editor_property('material_interface') and slot.get_editor_property('material_interface').get_editor_property('used_with_skeletal_mesh') for slot in materials)
+ assert len(materials)==1 and all(slot.get_editor_property('material_interface') and slot.get_editor_property('material_interface').get_editor_property('used_with_skeletal_mesh') for slot in materials)
  turntable=unreal.load_asset('/Game/RecordShop/Interaction/Actors/BP_Turntable')
  for variable in ('SilentPlaybackRemaining','TonearmReturnAlpha'):
   schema=unreal.BlueprintEditorLibrary.pin_type_to_json_schema(unreal.BlueprintEditorLibrary.get_member_variable_type(turntable,variable),turntable.generated_class())

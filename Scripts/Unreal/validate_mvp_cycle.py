@@ -172,9 +172,12 @@ def interact(actor,path):
  origin,extent=actor.get_actor_bounds(False);component=pawn.get_editor_property('BPC_Interaction')
  movement=pawn.get_component_by_class(unreal.CharacterMovementComponent);movement.set_movement_mode(unreal.MovementMode.MOVE_FLYING);movement.stop_movement_immediately()
  found=False
- for yaw,offset in [(0,unreal.Vector(-1,0,0)),(180,unreal.Vector(1,0,0)),(90,unreal.Vector(0,-1,0)),(-90,unreal.Vector(0,1,0))]:
+ candidates=[(0,unreal.Vector(-1,0,0)),(180,unreal.Vector(1,0,0)),(90,unreal.Vector(0,-1,0)),(-90,unreal.Vector(0,1,0))]
+ if path==TU:candidates=[(90,unreal.Vector(0,-1,0))]
+ for yaw,offset in candidates:
   pos=origin+offset*((extent.x if offset.x else extent.y)+100);pos.z=max(origin.z,100)
-  pawn.set_actor_location_and_rotation(pos,unreal.Rotator(0,yaw,0),False,True)
+  if path==TU:pos=actor.get_actor_location()+unreal.Vector(0,-105,2.2)
+  pawn.set_actor_location_and_rotation(pos,unreal.Rotator(pitch=0,yaw=yaw,roll=0),False,True)
   hit=unreal.SystemLibrary.sphere_trace_single(component,pos,pos+pawn.get_actor_forward_vector()*180,60,unreal.TraceTypeQuery.ECC_INTERACTABLE,False,[],unreal.DrawDebugTrace.NONE,True)
   if hit and actor.get_name() in hit.export_text():found=True;break
  assert found,'No interaction geometry '+actor.get_name()
@@ -185,6 +188,7 @@ def interact(actor,path):
  subsystem.inject_input_vector_for_action(action,unreal.Vector(1,0,0),[],[])
  yield from wait_frames()
  assert len(widgets(path))==1,(path,len(widgets(path)))
+ if path==TU:movement.set_movement_mode(unreal.MovementMode.MOVE_WALKING)
  R.setdefault('interaction_inputs',[]).append({'target':actor.get_name(),'keys':keys,'trace':hit.export_text(),'pathway':'synthetic Enhanced Input -> IA_Interact -> sphere trace -> interface -> UI'});save()
 
 level=unreal.get_editor_subsystem(unreal.LevelEditorSubsystem);editor=unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
@@ -194,6 +198,11 @@ for path in [FLOW,TT,SHELF,'/Game/DialogueManager',DU,SU,TU,RU,CUSTOMER,'/Game/R
 assert all(R['compiles'].values())
 R['dialogue_rows']=json.loads(unreal.DataTableFunctionLibrary.export_data_table_to_json_string(unreal.load_asset('/Game/CustomerDialogue')));save()
 assert level.load_level('/Game/RecordShop/Maps/Greybox/L_RecordShop_Greybox')
+IMMERSIVE=os.environ.get('MVP_IMMERSIVE')=='1'
+if IMMERSIVE:
+ assert '-nullrhi' not in unreal.SystemLibrary.get_command_line().lower()
+ unreal.SystemLibrary.execute_console_command(editor.get_editor_world(),'LevelEditor.ToggleImmersive')
+ R['viewport']='Immersive editor viewport for presentation capture; no gameplay or camera override'
 if NATIVE_UI:
  import ctypes
  from ctypes import wintypes
@@ -314,10 +323,53 @@ def run():
  mark('Record selected -> shelf -> GameFlow -> Turntable.SetRecord',record=tt.get_editor_property('CurrentRecord').export_text())
  yield from interact(tt,TU);mark('Turntable interaction -> UI')
  assert pc.get_view_target()==tt.get_editor_property('ListeningCamera')
+ owner_mesh=pawn.get_component_by_class(unreal.SkeletalMeshComponent)
+ assert owner_mesh.get_editor_property('skeletal_mesh_asset').get_name()=='SKM_ShopOwner1'
+ owner_anim=owner_mesh.get_anim_instance()
+ assert owner_anim.get_class().get_name()=='ABP_ShopOwner_C'
+ # Observe the production swept alignment; the fixture only supplied the initial approach.
+ deadline=time.monotonic()+1
+ previous=pawn.get_actor_location();alignment=[]
+ while time.monotonic()<deadline:
+  position=pawn.get_actor_location()
+  alignment.append({'position':position.export_text(),'frame_distance':(position-previous).length(),'rotation':pawn.get_actor_rotation().export_text()})
+  previous=position;yield
+ R['owner_alignment']=alignment;R['owner_alignment_target']=(tt.get_actor_location()+unreal.Vector(0,-80,2.2)).export_text();save()
+ yield from capture('owner-alignment')
+ assert (pawn.get_actor_location()-(tt.get_actor_location()+unreal.Vector(0,-80,2.2))).length()<3, pawn.get_actor_location().export_text()
+ assert max(s['frame_distance'] for s in alignment)<15, 'Player visibly snapped during alignment'
+ assert abs(pawn.get_actor_rotation().pitch)<1 and abs(pawn.get_actor_rotation().roll)<1
+ R['owner_alignment']=alignment;save()
  yield from capture('turntable-open')
  widget=widgets(TU)[0]
  for name,step in [('BTN_OpenLid',1),('BTN_PlaceRecord',2),('BTN_SelectRPM',2),('BTN_RPM33',3),('BTN_MoveTonearm',4)]:
   yield from click(widget,name);assert tt.get_editor_property('TurntableStep')==step,(name,tt.get_editor_property('TurntableStep'))
+  if name=='BTN_PlaceRecord':
+   montage=unreal.load_asset('/Game/RecordShop/Animation/Player/Montages/AM_ShopOwner_PlaceRecord')
+   assert owner_anim.montage_is_playing(montage), 'Accepted PlaceRecord did not animate the player'
+   began=time.monotonic();captures=set();samples=[]
+   while time.monotonic()-began<1.85:
+    elapsed=time.monotonic()-began
+    samples.append({'seconds':elapsed,'position':owner_anim.montage_get_position(montage),'active':owner_anim.montage_is_active(montage),'left_hand':owner_mesh.get_socket_location('LeftHand').export_text(),'right_hand':owner_mesh.get_socket_location('RightHand').export_text(),'record_z':tt.get_editor_property('Record').get_world_location().z})
+    for threshold,label in [(.1,'place-before-contact'),(.65,'place-reach'),(.95,'place-maximum-extension'),(1.65,'record-placed-owner-return')]:
+     if elapsed>=threshold and label not in captures:request_capture(label);captures.add(label)
+    yield
+   assert not owner_anim.montage_is_active(montage), 'Placement montage outlived the guarded presentation interval'
+   R['owner_place_record']=samples;save()
+  if name=='BTN_MoveTonearm':
+   montage=unreal.load_asset('/Game/RecordShop/Animation/Player/Montages/AM_ShopOwner_HandInteraction')
+   assert owner_anim.montage_is_playing(montage), 'Accepted tonearm action did not animate the player'
+   began=time.monotonic();captures=set();samples=[]
+   while time.monotonic()-began<1.8:
+    elapsed=time.monotonic()-began
+    samples.append({'seconds':elapsed,'position':owner_anim.montage_get_position(montage),'alpha':owner_anim.get_editor_property('TonearmHandAlpha'),'left_hand':owner_mesh.get_socket_location('LeftHand').export_text(),'tonearm_alpha':tt.get_editor_property('TonearmMotionAlpha')})
+    for threshold,label in [(.25,'tonearm-hand-approach'),(.65,'tonearm-hand-contact'),(1.0,'stylus-contact-hand'),(1.65,'tonearm-hand-released')]:
+     if elapsed>=threshold and label not in captures:request_capture(label);captures.add(label)
+    yield
+   assert max(s['alpha'] for s in samples)>.9
+   assert owner_anim.get_editor_property('TonearmHandAlpha')<.05, 'Hand IK survived its montage'
+   assert not owner_anim.montage_is_active(montage)
+   R['owner_tonearm_hand']=samples;save()
   if name in ('BTN_OpenLid','BTN_PlaceRecord','BTN_MoveTonearm'):
    yield from capture('motion-'+name)
    R.setdefault('natural_turntable_motion',[]).append({'action':name,'lid_pitch':tt.get_editor_property('Lid').get_editor_property('relative_rotation').pitch,'record_z':tt.get_editor_property('Record').get_editor_property('relative_location').z,'tonearm_yaw':tt.get_editor_property('TonearmPivot').get_editor_property('relative_rotation').yaw})
@@ -400,6 +452,17 @@ def run():
  assert pc.get_view_target()==pawn, 'Result did not restore player camera'
  mark('CustomerExited -> ActiveCustomer cleared -> Explore',after_exit=str(customer.get_actor_location()))
  yield from capture('explore')
+ # Exercise restored game input rather than only checking cursor/camera flags.
+ lib=unreal.get_default_object(unreal.load_class(None,'/Script/Engine.SubsystemBlueprintLibrary'))
+ sub=lib.call_method('GetLocalPlayerSubSystemFromPlayerController',args=(pc,unreal.EnhancedInputLocalPlayerSubsystem.static_class()))
+ move_action=unreal.load_asset('/Game/Input/Actions/IA_Move')
+ move_start=pawn.get_actor_location();deadline=time.monotonic()+.35;control_samples=[]
+ while time.monotonic()<deadline:
+  sub.inject_input_vector_for_action(move_action,unreal.Vector(0,-.25,0),[],[])
+  control_samples.append(pawn.get_velocity().length());yield
+ assert (pawn.get_actor_location()-move_start).length()>5 and max(control_samples)>50, 'Explore did not accept normal movement input'
+ R['restored_control']={'input':'synthetic Enhanced Input IA_Move after natural Explore; no input/focus correction','distance_cm':(pawn.get_actor_location()-move_start).length(),'max_speed':max(control_samples)};save()
+ yield from capture('restored-player-control')
  if os.environ.get('MVP_WIDE_CAPTURE')=='1' and '-nullrhi' not in unreal.SystemLibrary.get_command_line().lower():
   # Additional presentation observation AFTER the entire natural cycle. This
   # temporary camera is never saved and is not evidence of gameplay progression.
@@ -423,6 +486,9 @@ def tick(delta):
  try:
   if phase['end'] is not None:
    if time.monotonic()-phase['end']>3:
+    if IMMERSIVE:
+     assert editor.get_game_world() is None, 'PIE did not finish before viewport restoration'
+     unreal.SystemLibrary.execute_console_command(editor.get_editor_world(),'LevelEditor.ToggleImmersive')
     unreal.unregister_slate_post_tick_callback(handle)
     # Return shutdown ownership to -ExecutePythonScript so its Slate notification
     # is released before the engine's core ticker/internationalization teardown.
