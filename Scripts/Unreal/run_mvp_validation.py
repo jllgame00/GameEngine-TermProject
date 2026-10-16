@@ -45,6 +45,32 @@ if data.get('audio_output_capture'):
   summary['audio_output']={'path':str(capture),'seconds':frames/rate,'channels':channels,'peak':peak,'rms':rms,'pass':peak>.01 and rms>.001 and peak<1}
  except Exception as error:summary['audio_output']={'path':str(capture),'pass':False,'error':repr(error)}
  summary['assertions_pass']=summary['assertions_pass'] and summary['audio_output']['pass']
+if data.get('dialogue_next_position_validation'):
+ # Cached UMG geometry can be unavailable in PIE. Fail closed on the actual
+ # screenshots instead of allowing five identical zero vectors to pass.
+ try:
+  from PIL import Image
+  frames=[x for x in data.get('screenshots_requested',[]) if x['stage'].startswith('dialogue-line-')]
+  assert len(frames)==5, 'Expected all five owner dialogue captures'
+  boundaries=[]
+  for frame in frames:
+   with Image.open(frame['path']) as source:
+    im=source.convert('RGB');pixels=im.load();rows=[]
+    for y in range(int(im.height*.7),int(im.height*.96)):
+     start=None
+     for x in range(int(im.width*.6),int(im.width*.94)):
+      bright=min(pixels[x,y])>150 and max(pixels[x,y])-min(pixels[x,y])<45
+      if bright and start is None:start=x
+      if not bright and start is not None:
+       if im.width*.04<x-start<im.width*.11:rows.append((y,start,x-1))
+       start=None
+    pairs=[(a,b) for a in rows for b in rows if a[1:]==b[1:] and im.height*.018<b[0]-a[0]<im.height*.06]
+    assert len(pairs)==1, ('Next button border not uniquely found',frame['path'],pairs)
+    top,bottom=pairs[0];boundaries.append([top[1],top[0],top[2],bottom[0]])
+  assert len({tuple(b) for b in boundaries})==1, ('Next moved across dialogue lines',boundaries)
+  summary['dialogue_next_pixels']={'pass':True,'boundaries':boundaries,'frames':[x['path'] for x in frames]}
+ except Exception as error:summary['dialogue_next_pixels']={'pass':False,'error':repr(error)}
+ summary['assertions_pass']=summary['assertions_pass'] and summary['dialogue_next_pixels']['pass']
 summary['process_pass']=code==0 and summary['complete'] and summary['assertions_pass'] and summary['gameplay_log_pass']
 (folder/(name+'-process.json')).write_text(json.dumps(summary,indent=2),encoding='utf-8')
 print(json.dumps(summary,indent=2),flush=True)

@@ -121,6 +121,104 @@ def presentation_motion_checks(world, turntable_class, widget_class, pawn, recor
     check('presentation_motion_midpoints_reset_and_close', run)
 
 
+def owner_placement_checks(world, turntable_class, pawn, record, check):
+    """Direct guard/cancellation diagnostics; rendered input-driven proof is in the cycle suite."""
+    def run():
+        statics = unreal.get_default_object(unreal.GameplayStatics)
+        transform = unreal.Transform(location=unreal.Vector(0, 0, 3000))
+        scale = unreal.SpawnActorScaleMethod.MULTIPLY_WITH_ROOT
+        actor = statics.call_method('BeginDeferredActorSpawnFromClass', args=(
+            world, turntable_class, transform,
+            unreal.SpawnActorCollisionHandlingMethod.ALWAYS_SPAWN, None, scale))
+        actor = statics.call_method('FinishSpawningActor', args=(actor, transform, scale))
+        previous = pawn.get_actor_transform()
+        mesh = pawn.get_component_by_class(unreal.SkeletalMeshComponent)
+        anim = mesh.get_anim_instance()
+        montage = unreal.load_asset('/Game/RecordShop/Animation/Player/Montages/AM_ShopOwner_PlaceRecord')
+        movement = pawn.get_component_by_class(unreal.CharacterMovementComponent)
+        previous_orient = movement.get_editor_property('orient_rotation_to_movement')
+        try:
+            for original in (False, True):
+                movement.set_editor_property('orient_rotation_to_movement', original)
+                actor.call_method('BeginOwnerAlignment')
+                assert actor.get_editor_property('OwnerAlignmentActive')
+                assert not movement.get_editor_property('orient_rotation_to_movement')
+                actor.call_method('BeginOwnerAlignment')
+                actor.call_method('StopOwnerPresentation')
+                assert not actor.get_editor_property('OwnerAlignmentActive')
+                assert movement.get_editor_property('orient_rotation_to_movement') == original, 'Repeated begin/close lost original movement-facing policy'
+            movement.set_editor_property('orient_rotation_to_movement', previous_orient)
+            # Reproduce owner feedback: accepted placement from an oblique
+            # approach must not silently omit the montage outside the old 24cm gate.
+            pawn.set_actor_location_and_rotation(unreal.Vector(45, -80, 3000),
+                unreal.Rotator(pitch=0, yaw=90, roll=0), False, True)
+            actor.call_method('SetRecord', args=(record,))
+            actor.call_method('PlaceRecord')
+            assert not anim.montage_is_active(montage), 'Rejected placement animated'
+            actor.call_method('OpenLid')
+            cover = unreal.load_asset('/Game/RecordShop/Animation/Player/Montages/AM_ShopOwner_CoverReach')
+            assert anim.montage_is_active(cover), 'Accepted cover action lacked arm presentation'
+            anim.montage_set_position(cover, .4)
+            actor.call_method('OpenLid')
+            assert abs(anim.montage_get_position(cover)-.4) < .001, 'Repeated cover action restarted montage'
+            actor.call_method('PlaceRecord')
+            assert anim.montage_is_active(montage), 'Accepted placement lacked montage'
+            anim.montage_set_position(montage, .4)
+            actor.call_method('PlaceRecord')
+            assert abs(anim.montage_get_position(montage)-.4) < .001, 'Repeated placement restarted montage'
+            assert actor.get_editor_property('TurntableStep') == 2
+            actor.call_method('StopOwnerPresentation')
+            assert actor.get_editor_property('OwnerMontageRemaining') == 0
+            assert actor.get_editor_property('OwnerAlignmentRemaining') == 0
+            assert actor.get_editor_property('TurntableStep') == 2, 'Animation cancellation advanced gameplay'
+            hand = unreal.load_asset('/Game/RecordShop/Animation/Player/Montages/AM_ShopOwner_HandInteraction')
+            actor.call_method('SelectRPM33')
+            rpm_montage = unreal.load_asset('/Game/RecordShop/Animation/Player/Montages/AM_ShopOwner_RPMAdjust')
+            assert anim.montage_is_active(rpm_montage), 'Accepted RPM action lacked wrist presentation'
+            anim.montage_set_position(rpm_montage, .4)
+            for rpm in (33,45,78):
+                actor.call_method('SelectRPM'+str(rpm))
+                assert actor.get_editor_property('SelectedRPM') == 33, 'Repeated RPM action changed authoritative selection'
+                assert abs(anim.montage_get_position(rpm_montage)-.4) < .001, 'Repeated RPM action restarted montage'
+            actor.call_method('StopOwnerPresentation')
+            assert not anim.montage_is_playing(rpm_montage), 'RPM animation survived cancellation'
+            assert actor.get_editor_property('TurntableStep') == 3
+            actor.call_method('MoveTonearm')
+            assert anim.montage_is_active(hand), 'Accepted tonearm action lacked montage'
+            anim.montage_set_position(hand, .4)
+            actor.call_method('MoveTonearm')
+            assert abs(anim.montage_get_position(hand)-.4) < .001, 'Repeated tonearm action restarted montage'
+            actor.call_method('StopOwnerPresentation')
+            assert actor.get_editor_property('TurntableStep') == 4, 'Hand cancellation advanced gameplay'
+            actor.call_method('SetRecord', args=(record,))
+            assert actor.get_editor_property('TurntableStep') == 0
+            assert actor.get_editor_property('OwnerMontageRemaining') == 0
+            for rpm in (45,78):
+                actor.call_method('OpenLid')
+                actor.call_method('StopOwnerPresentation')
+                assert not anim.montage_is_playing(cover), 'Cover animation survived cancellation'
+                assert actor.get_editor_property('TurntableStep') == 1
+                actor.call_method('PlaceRecord');actor.call_method('SelectRPM'+str(rpm))
+                assert anim.montage_is_playing(rpm_montage)
+                assert actor.get_editor_property('SelectedRPM') == rpm
+                actor.call_method('SetRecord', args=(record,))
+                assert not anim.montage_is_playing(rpm_montage), 'RPM animation survived record reset'
+                assert actor.get_editor_property('TurntableStep') == 0
+            # No actor movement or animation is allowed for a far-away diagnostic turntable.
+            pawn.set_actor_location(previous.translation, False, True)
+            actor.call_method('OpenLid');actor.call_method('PlaceRecord')
+            assert actor.get_editor_property('OwnerMontageRemaining') == 0
+            return {'rejected_action': True, 'duplicate_guard': True,
+                    'interruption_independent_of_gameplay': True, 'reset': True,
+                    'far_player_does_not_fake_contact': True, 'tonearm_duplicate_and_cancel_guard': True}
+        finally:
+            actor.call_method('StopOwnerPresentation')
+            movement.set_editor_property('orient_rotation_to_movement', previous_orient)
+            pawn.set_actor_transform(previous, False, True)
+            actor.destroy_actor()
+    check('owner_placement_guards_cancellation_and_reset', run)
+
+
 def repeat_setup_checks(world, turntable_class, record, check):
     import re
     record.import_text(re.sub(r'(Audio_[A-Za-z0-9_]+)=(?:None|"[^"]*")', r'\1=None', record.export_text()))
@@ -346,10 +444,19 @@ def production_audio_replay_checks(world, turntable_class, source_record, result
         record=actor.get_editor_property('CurrentRecord')
         text=re.sub(r'(Audio_[A-Za-z0-9_]+)=(?:None|"[^"]*")',lambda m:m[1]+'="/Script/Engine.SoundWave\''+sound.get_path_name()+'\'"',source_record.export_text())
         record.import_text(text)
-        previous=None
+        def music_components():
+            # Auto-destroyed audio can leave an expired Python proxy that cannot
+            # even be passed to IsValid. Query live UObjects afresh, retaining
+            # only scalar evidence across ticks; binding errors still fail.
+            return {component.get_path_name(): component.is_playing()
+                    for component in unreal.ObjectIterator(unreal.AudioComponent)
+                    if component.get_editor_property('sound') == sound}
+
         for repeat in range(2):
             actor.call_method('SetRecord',args=(record,))
             assert actor.get_editor_property('PlaybackAudio') is None
+            before = music_components()
+            assert not any(before.values()), ('Previous LP survived reset', before)
             for method in ('OpenLid','PlaceRecord','SelectRPM33','MoveTonearm','PlayRecord'):
                 actor.call_method(method)
             assert actor.get_editor_property('PlaybackRequested')
@@ -364,24 +471,29 @@ def production_audio_replay_checks(world, turntable_class, source_record, result
             assert audio.is_playing() and audio.get_editor_property('sound')==sound
             assert actor.get_editor_property('TonearmMotionAlpha')==1
             assert -0.02<=stylus_contact(actor)['gap_cm']<=0.05
-            assert previous is None or audio!=previous
+            audio_path = audio.get_path_name()
             actor.call_method('PlayRecord');assert actor.get_editor_property('PlaybackAudio')==audio
-            voices=[a for a in unreal.ObjectIterator(unreal.AudioComponent) if a.is_playing() and a.get_editor_property('sound')==sound]
-            assert len(voices)==1, 'Overlapping production LP components'
+            voices = music_components()
+            assert [path for path, playing in voices.items() if playing] == [audio_path], ('Overlapping production LP components', voices)
             if repeat==0:
                 until=time.monotonic()+1
                 while time.monotonic()<until:yield
                 actor.call_method('BeginTonearmReturn')
                 assert 'FADING_OUT' in str(audio.get_play_state()), str(audio.get_play_state())
+            # Do not keep or compare an AudioComponent proxy after completion.
+            audio = None
             deadline=time.monotonic()+40
             while not actor.get_editor_property('CompletionSent'):
                 assert time.monotonic()<deadline
                 yield
             assert actor.get_editor_property('PlaybackAudio') is None
-            assert not unreal.SystemLibrary.is_valid(audio) or not audio.is_playing()
+            stopped = music_components()
+            assert not any(stopped.values()), ('LP still playing after completion', stopped)
             assert abs(actor.get_editor_property('TonearmPivot').get_editor_property('relative_rotation').yaw)<.01
-            observations.append({'repeat':repeat+1,'sound':sound.get_path_name(),'one_component':True,'contact_before_audio':True,'completion':'early fade then physical return' if repeat==0 else 'full natural audio finished callback after reset'})
-            previous=audio
+            observations.append({'repeat':repeat+1,'sound':sound.get_path_name(),'one_component':True,'contact_before_audio':True,'completion':'early fade then physical return' if repeat==0 else 'full natural audio finished callback after reset',
+                                 'component_path':audio_path,'before_reset_playback':before,
+                                 'during_playback':voices,'after_completion':stopped,
+                                 'completed_component':'live and stopped' if audio_path in stopped else 'absent from live components'})
         result['isolated']['production_music_fade_reset_replay']={'pass':True,'observations':observations,'limit':'Isolated direct Turntable commands; all natural recommendation paths are validated separately.'}
     except Exception:
         result['isolated']['production_music_fade_reset_replay']={'pass':False,'observations':observations,'error':traceback.format_exc()}
@@ -389,6 +501,30 @@ def production_audio_replay_checks(world, turntable_class, source_record, result
         audio=actor.get_editor_property('PlaybackAudio')
         if audio:audio.stop()
         actor.destroy_actor();save()
+
+
+def prepare_ui_contact_diagnostic(actor, pawn):
+    """Explicit isolated geometry fixture; never used by the natural-cycle runner."""
+    previous = pawn.get_actor_transform()
+    pawn.get_component_by_class(unreal.CharacterMovementComponent).stop_movement_immediately()
+    station = actor.get_actor_location() + unreal.Vector(0, -80, 2.2)
+    pawn.set_actor_location_and_rotation(station, unreal.Rotator(pitch=0, yaw=90, roll=0), False, True)
+    actor.call_method('EvaluateOwnerContact')
+    assert actor.get_editor_property('OwnerContactReady'), ('Actual diagnostic station is not ready',
+        pawn.get_actor_location().export_text(), station.export_text(),
+        pawn.get_actor_rotation().export_text(), pawn.get_velocity().export_text())
+    return previous
+
+
+def settle_ui_presentation_diagnostic(actor):
+    """Exercise supported interruption between isolated delegate calls, not timed gameplay."""
+    step = actor.get_editor_property('TurntableStep')
+    actor.call_method('SettlePresentationMotion')
+    actor.call_method('StopOwnerPresentation')
+    actor.call_method('EvaluateOwnerContact')
+    assert actor.get_editor_property('TurntableStep') == step
+    assert actor.get_editor_property('OwnerContactReady')
+    assert actor.get_editor_property('OwnerMontageRemaining') == 0
 
 
 def rpm_ui_checks(world, pawn, turntable_class, widget_class, record, check):
@@ -405,8 +541,10 @@ def rpm_ui_checks(world, pawn, turntable_class, widget_class, record, check):
             actor = statics.call_method('FinishSpawningActor', args=(actor, transform, scale))
             widget = None
             observations = []
+            previous = pawn.get_actor_transform()
             try:
                 actor.call_method('SetRecord', args=(record,))
+                prepare_ui_contact_diagnostic(actor, pawn)
                 actor.call_method('Interact', args=(pawn,))
                 widgets = list(unreal.WidgetLibrary.get_all_widgets_of_class(world, widget_class, True))
                 assert len(widgets) == 1
@@ -415,6 +553,7 @@ def rpm_ui_checks(world, pawn, turntable_class, widget_class, record, check):
                 options = widget.get_editor_property('VB_RPMOptions')
 
                 def click(button, expected):
+                    settle_ui_presentation_diagnostic(actor)
                     before = actor.get_editor_property('TurntableStep')
                     widget.get_editor_property(button).get_editor_property('on_clicked').broadcast()
                     after = actor.get_editor_property('TurntableStep')
@@ -422,6 +561,14 @@ def rpm_ui_checks(world, pawn, turntable_class, widget_class, record, check):
                                          'rpm': actor.get_editor_property('SelectedRPM'),
                                          'options': str(options.get_visibility())})
                     assert after == expected, observations[-1]
+                    if actor.get_editor_property('OwnerMontageRemaining') > 0:
+                        widget.get_editor_property(button).get_editor_property('on_clicked').broadcast()
+                        assert actor.get_editor_property('TurntableStep') == after, 'Busy action advanced twice'
+                        following = {1: 'BTN_PlaceRecord', 2: f'BTN_RPM{rpm}',
+                                     3: 'BTN_MoveTonearm', 4: 'BTN_Play'}[after]
+                        widget.get_editor_property(following).get_editor_property('on_clicked').broadcast()
+                        assert actor.get_editor_property('TurntableStep') == after, 'Busy UI allowed a different next action'
+                        assert not actor.get_editor_property('PlaybackRequested'), 'Busy UI queued playback'
 
                 click('BTN_SelectRPM', 0)
                 assert options.get_visibility() == unreal.SlateVisibility.COLLAPSED
@@ -435,15 +582,18 @@ def rpm_ui_checks(world, pawn, turntable_class, widget_class, record, check):
                 click('BTN_SelectRPM', 3)
                 assert options.get_visibility() == unreal.SlateVisibility.COLLAPSED
                 click('BTN_MoveTonearm', 4)
-                click('BTN_Play', 4)
-                assert actor.get_editor_property('PlaybackRequested')
-                actor.call_method('ReceiveTick', args=(1.0,))
+                # The preceding supported settle reached stylus contact, so
+                # Play starts immediately rather than queueing during descent.
+                click('BTN_Play', 5)
+                assert not actor.get_editor_property('CompletionSent')
                 assert actor.get_editor_property('TurntableStep') == 5
                 click('BTN_Play', 5)
-                return {'events': observations, 'limit': 'OnClicked broadcasts, not mouse hit testing; Audio=None.'}
+                return {'events': observations, 'limit': 'Isolated station geometry and OnClicked broadcasts, with supported presentation interruption between commands; Audio=None. Timed native input is covered by natural cycles.'}
             finally:
                 if widget:
                     widget.remove_from_parent()
+                actor.call_method('StopOwnerPresentation')
+                pawn.set_actor_transform(previous, False, True)
                 actor.destroy_actor()
                 pc = unreal.GameplayStatics.get_player_controller(world, 0)
                 pc.set_editor_property('show_mouse_cursor', False)
@@ -553,9 +703,12 @@ def interact(a):a.call_method('Interact',args=(pawn,))
 def count_modals():return {p:len(widgets(p)) for p in [DU,SU,TU,RU]}
 
 save()
-import faulthandler
-_fault=open(OUT.with_suffix('.trace.txt'),'w')
-faulthandler.enable(file=_fault)
+# Keep normal regression/shutdown evidence uninstrumented. Opt in only when
+# diagnosing a reproduced native fault; such a run is not a shutdown control.
+if os.environ.get('MVP_FAULTHANDLER')=='1':
+ import faulthandler
+ _fault=open(OUT.with_suffix('.trace.txt'),'w')
+ faulthandler.enable(file=_fault)
 # An in-memory observer consumes the actual dispatchers. No package is saved.
 factory=unreal.BlueprintFactory();factory.set_editor_property('parent_class',unreal.Actor)
 probe=unreal.AssetToolsHelpers.get_asset_tools().create_asset('BP_MVPObserver','/Game/RecordShop/Dev/IntegrationProbe',unreal.Blueprint,factory)
@@ -705,6 +858,7 @@ def run():
    profile.import_text(original);observer.call_method('SetScoringProfileFixture',args=(manager,profile,original_mood))
  check('optional_raw_score_availability_and_propagation',optional_score)
  presentation_motion_checks(world,cls(TT),cls(TU),pawn,tt.get_editor_property('CurrentRecord'),check)
+ owner_placement_checks(world,cls(TT),pawn,tt.get_editor_property('CurrentRecord'),check)
  rpm_ui_checks(world,pawn,cls(TT),cls(TU),tt.get_editor_property('CurrentRecord'),check)
  repeat_setup_checks(world,cls(TT),tt.get_editor_property('CurrentRecord'),check)
  def completion_guards():
@@ -712,11 +866,13 @@ def run():
   silent=tt.get_editor_property('CurrentRecord')
   silent.import_text(re.sub(r'(Audio_[A-Za-z0-9_]+)=(?:None|"[^"]*")',r'\1=None',silent.export_text()))
   tt.call_method('SetRecord',args=(silent,))
+  prepare_ui_contact_diagnostic(tt,pawn)
   interact(tt);interact(tt);interact(shelves[0]);assert len(widgets(TU))==1 and not widgets(SU)
   w=widgets(TU)[0];initial=observer.get_editor_property('Completions')
   for name in ['BTN_Play','BTN_MoveTonearm','BTN_PlaceRecord','BTN_RPM78']:click(w,name)
   assert tt.get_editor_property('TurntableStep')==0;assert observer.get_editor_property('Completions')==initial
-  for name in ['BTN_OpenLid','BTN_PlaceRecord','BTN_RPM33','BTN_MoveTonearm','BTN_Play']:click(w,name)
+  for name in ['BTN_OpenLid','BTN_PlaceRecord','BTN_RPM33','BTN_MoveTonearm','BTN_Play']:
+   settle_ui_presentation_diagnostic(tt);click(w,name)
   tt.call_method('ReceiveTick',args=(1.0,));tt.call_method('ReceiveTick',args=(1.5,));tt.call_method('ReceiveTick',args=(1.2,))
   assert tt.get_editor_property('CompletionSent');assert observer.get_editor_property('Completions')==initial+1
   assert w.get_editor_property('TurntableRef') is None
@@ -730,8 +886,10 @@ def run():
   flow.call_method('EvaluateRecordScore',args=('late','late','late'))
   manager.call_method('EvaluateLP',args=('late','late','late',[]))
   assert flow.get_editor_property('RawScoreAvailable') and flow.get_editor_property('RawRecommendationScore')==1
-  return {'one_completion':True,'one_result':True,'cross_modal_blocked':True}
- check('completion_result_and_duplicate_guards',completion_guards)
+  return {'one_completion':True,'one_result':True,'cross_modal_blocked':True,'limit':'Isolated station fixture and supported presentation interruption between UI delegate commands; not natural E2E.'}
+ diagnostic_transform=pawn.get_actor_transform()
+ try:check('completion_result_and_duplicate_guards',completion_guards)
+ finally:pawn.set_actor_transform(diagnostic_transform,False,True)
  # SetInputMode queues owning-player Slate operations until the frame finishes.
  # Observe focus on subsequent frames without assigning any test-side focus.
  for _ in range(4):yield
@@ -827,6 +985,24 @@ def run():
   except Exception:R['isolated']['real_audio_component_callback']={'pass':False,'error':traceback.format_exc()};save()
   finally:a.destroy_actor()
   yield from production_audio_replay_checks(world,cls(TT),tt.get_editor_property('CurrentRecord'),R,save)
+ def cleanup_without_player():
+  # Teardown may destroy/unpossess the pawn before widget Destruct cancels an
+  # active approach. Exercise that real absent-player boundary explicitly.
+  movement=pawn.get_component_by_class(unreal.CharacterMovementComponent)
+  original_orient=movement.get_editor_property('orient_rotation_to_movement')
+  tt.call_method('BeginOwnerAlignment')
+  assert tt.get_editor_property('OwnerAlignmentActive')
+  pc.call_method('UnPossess')
+  try:
+   assert unreal.GameplayStatics.get_player_character(world,0) is None
+   tt.call_method('StopOwnerPresentation')
+   assert not tt.get_editor_property('OwnerAlignmentActive')
+   assert tt.get_editor_property('OwnerAlignmentRemaining')==0
+   return {'absent_player_cleanup':True,'limit':'Direct teardown diagnostic; no natural-cycle claim'}
+  finally:
+   pc.call_method('Possess',args=(pawn,))
+   movement.set_editor_property('orient_rotation_to_movement',original_orient)
+ check('owner_cleanup_without_possessed_player',cleanup_without_player)
  R['complete']=True;R['pass']=all(x.get('pass',True) for x in R['isolated'].values());save()
 
 def tick(delta):

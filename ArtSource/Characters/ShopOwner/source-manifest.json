@@ -1,0 +1,549 @@
+{
+  "format_version": 1,
+  "source_kind": "RECONSTRUCTED_FROM_PRODUCTION_UNREAL_ASSETS",
+  "not_original_contributor_dcc": true,
+  "production_mesh": "/Game/RecordShop/Characters/Player/Mesh/SKM_ShopOwner1",
+  "production_skeleton": "/Game/RecordShop/Characters/Player/Mesh/SKEL_ShopOwner",
+  "production_material": "/Game/RecordShop/Characters/Player/Materials/M_ShopOwner_Body",
+  "tools": {
+    "Unreal": "5.8 supported SkeletalMeshExporterFBX / AnimSequenceExporterFBX / TextureExporterTGA",
+    "Blender": "5.2.1 LTS, official FBX importer",
+    "textures": "lossless TGA to PNG; decoded pixel hashes verified identical"
+  },
+  "source_assets": [
+    {
+      "path": "Content/RecordShop/Animation/Player/Sequences/A_ShopOwner_SendingFax_01.uasset",
+      "contributor_ref": "origin/feature/customer-ai",
+      "contributor_sha": "e418b67d8c2830b32a9506466be66184720f2e6b",
+      "contributor_lfs_oid": "bcf243c8675fde8539281181c5973fb95baeda5b4be8ae1ee4a6621124b559e0",
+      "production_adapted_sha256": "91a688f8aeb84d2d193c2ad018e6bec648310d0bb9025ed2be6ee8673552a1e8"
+    },
+    {
+      "path": "Content/RecordShop/Characters/Player/Mesh/SKEL_ShopOwner.uasset",
+      "contributor_ref": "origin/feature/customer-ai",
+      "contributor_sha": "e418b67d8c2830b32a9506466be66184720f2e6b",
+      "contributor_lfs_oid": "fb9faf84fec3a281175bc91eb33d6dff660ed879e24e23e5c96b6bed1b7e010e",
+      "production_adapted_sha256": "3a06c7a3f665857bef2b6e516bf2836ad1e7c82836bf2ba111a74a7dcbc799be"
+    },
+    {
+      "path": "Content/RecordShop/Characters/Player/Mesh/SKM_ShopOwner1.uasset",
+      "contributor_ref": "origin/feature/customer-ai",
+      "contributor_sha": "e418b67d8c2830b32a9506466be66184720f2e6b",
+      "contributor_lfs_oid": "fc87ed83ce534f734fcf9b430c3342ef168d43ae1ec84191c3e6075d895bb4ca",
+      "production_adapted_sha256": "829c93890b163bec73907bb9df09238c5a9ef9daef9a03b6e37c83d673ac9367"
+    },
+    {
+      "path": "Content/RecordShop/Characters/Player/Textures/T_ShopOwner_BaseColor.uasset",
+      "contributor_ref": "origin/feature/customer-ai",
+      "contributor_sha": "e418b67d8c2830b32a9506466be66184720f2e6b",
+      "contributor_lfs_oid": "9773801a517131c79f45cc1ea9ca2feee3987186dfe6ccfa2e8a7ebc9fba4e20",
+      "production_adapted_sha256": "042da6a31e76c1677d4f74e559972c918a0248fa48dfc3cf1946bbd2bd6832fd"
+    },
+    {
+      "path": "Content/RecordShop/Characters/Player/Textures/T_ShopOwner_Normal.uasset",
+      "contributor_ref": "origin/feature/customer-ai",
+      "contributor_sha": "e418b67d8c2830b32a9506466be66184720f2e6b",
+      "contributor_lfs_oid": "19d40489f1ffc8789a5ad46f65f57b63495e428b59506a3e21303b0b20cb79c1",
+      "production_adapted_sha256": "f7c3ed0dd9ca1bcfa5ef925d7e6671b1077afed12da2d38302dcddb2aee5f298"
+    },
+    {
+      "path": "Content/RecordShop/Characters/Player/Textures/T_ShopOwner_ORM.uasset",
+      "contributor_ref": "origin/feature/customer-ai",
+      "contributor_sha": "e418b67d8c2830b32a9506466be66184720f2e6b",
+      "contributor_lfs_oid": "a0f5bc4ebc16e73758286832285fcd4a64ac6b46f730ab882278ed220571c8c0",
+      "production_adapted_sha256": "eac86106424b38202615b2f12834e70e8b3fa8304508b59c46e2fe4cca087cf2"
+    },
+    {
+      "path": "Content/RecordShop/Characters/Player/Materials/M_ShopOwner_Body.uasset",
+      "contributor_ref": "origin/feature/customer-ai",
+      "contributor_sha": "e418b67d8c2830b32a9506466be66184720f2e6b",
+      "contributor_lfs_oid": "885ec02b5648e165ac4492991cf2c4978ec732d8165228ccbd11f7164ad1b0e6",
+      "production_adapted_sha256": "70b1ebf6cd8fc98eac4d2ace57ea29187484b378f0646c5e92bddcbd5e0e43cb"
+    }
+  ],
+  "current_files": [
+    {
+      "path": "Animations/A_ShopOwner_SendingFax_01.fbx",
+      "bytes": 2708304,
+      "sha256": "00a42dc3d513b7aaf80bed77f0b340e6c7fb221c13a29bf79c3cfc1664bfeace"
+    },
+    {
+      "path": "ShopOwner.blend",
+      "bytes": 13901015,
+      "sha256": "223cd15814d34da5efd3098473c8e25a4981647c45001a43349f6ab78181a52a"
+    },
+    {
+      "path": "ShopOwner.fbx",
+      "bytes": 3935120,
+      "sha256": "e57a93e9ec16b603da33a86e857ed000a65aa8b58afe49746f5b374f0b0fbdda"
+    },
+    {
+      "path": "Textures/T_ShopOwner_BaseColor.png",
+      "bytes": 4012593,
+      "sha256": "0ea56c624b1d7505df2b1c86f5c318e9d2b78b0104ab88ff25c932822809aa5f"
+    },
+    {
+      "path": "Textures/T_ShopOwner_Normal.png",
+      "bytes": 1898599,
+      "sha256": "5160dcd8d920cd40c8618a36848084487e73b21d9f0dfb5529d103e50cc6c32b"
+    },
+    {
+      "path": "Textures/T_ShopOwner_ORM.png",
+      "bytes": 2899893,
+      "sha256": "0093ce612e6b88899fc10fca9c57709c15a25d1a8e72cc104e0176c1b56edb01"
+    },
+    {
+      "path": "Animations/A_ShopOwner_RecordReach.fbx",
+      "bytes": 1132688,
+      "sha256": "e46b2448a2e951adbcf6c708e11ec4f4510554204c54b367b3661b67e77135cc",
+      "role": "Supported Unreal export of derived production reach/recovery clip; contributor SendingFax adaptation"
+    },
+    {
+      "path": "Animations/A_ShopOwner_TonearmReach.fbx",
+      "bytes": 1132688,
+      "sha256": "8453025862ae71137a46164a07fe29335cfe97e13e224542c01e36bbf9adb8c5",
+      "role": "Supported Unreal export of derived production reach/recovery clip; contributor SendingFax adaptation"
+    },
+    {
+      "path": "Animations/A_ShopOwner_CoverReach.fbx",
+      "bytes": 1132688,
+      "sha256": "8d757fd4275cbd762713117d6691463e1fa59ee7bffe66dc1ef8fb0a3213359f"
+    },
+    {
+      "path": "Animations/A_ShopOwner_RPMAdjust.fbx",
+      "bytes": 1132672,
+      "sha256": "1f5f8fd2161e0fc3b3e1bc91ac45f12653db0ebb34b2ec416443073789129b51"
+    }
+  ],
+  "historical_files": [
+    {
+      "path": "Historical/ShopOwner_PrePR14.blend",
+      "sha256": "78120b7d087a841d369944b8dc08c9e185c2eb4db2be72db80665829078f6fde",
+      "role": "Previous procedural SKM_ShopOwner source; not current production"
+    },
+    {
+      "path": "Historical/ShopOwner_PrePR14.fbx",
+      "sha256": "a769c41f2a6ce52e522dafb30bae2c69af97db90893094321e6cbe18bf324e14",
+      "role": "Previous procedural SKM_ShopOwner source; not current production"
+    }
+  ],
+  "geometry": {
+    "vertices": 84619,
+    "polygons": 101797,
+    "triangles": 101797,
+    "bones": 65,
+    "positions_and_weights_sha256": "e16ddfb24047afb20ab856cdbd1bb51ef3fb577e2aa8c7b9f121d02a2c2a69d3",
+    "topology_sha256": "94b5bb9adf26d5c5c275f75da5034ce3fc23b834c8a26937eaab65964b2a3566",
+    "uv_sha256": "9d970b10f090cefa6162672ffe66f9b01b6a3feb7ad2ad8d1ba4186cb3b5fb48",
+    "bones_sha256": "11f4e378effd8e4ddb053858f9d41335946bb851a25a75854779fe25d4ce39b0",
+    "mesh_world_matrix": [
+      [
+        0.009999999776482582,
+        -2.3836035922819576e-10,
+        4.540197384717004e-11,
+        -2.9278452995384896e-09
+      ],
+      [
+        -2.3836035922819576e-10,
+        0.009999999776482582,
+        -1.490116086078075e-10,
+        -2.9802318390892424e-09
+      ],
+      [
+        4.540197384717004e-11,
+        -1.490116086078075e-10,
+        0.009999999776482582,
+        2.086162576020456e-09
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "armature_world_matrix": [
+      [
+        0.009999999776482582,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.009999999776482582,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.009999999776482582,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "dimensions_m": [
+      0.8154391050338745,
+      0.3202446699142456,
+      1.6476701498031616
+    ],
+    "bone_names_parents": [
+      {
+        "name": "Hips",
+        "parent": "None"
+      },
+      {
+        "name": "Spine",
+        "parent": "Hips"
+      },
+      {
+        "name": "Spine1",
+        "parent": "Spine"
+      },
+      {
+        "name": "Spine2",
+        "parent": "Spine1"
+      },
+      {
+        "name": "Neck",
+        "parent": "Spine2"
+      },
+      {
+        "name": "Head",
+        "parent": "Neck"
+      },
+      {
+        "name": "HeadTop_End",
+        "parent": "Head"
+      },
+      {
+        "name": "LeftShoulder",
+        "parent": "Spine2"
+      },
+      {
+        "name": "LeftArm",
+        "parent": "LeftShoulder"
+      },
+      {
+        "name": "LeftForeArm",
+        "parent": "LeftArm"
+      },
+      {
+        "name": "LeftHand",
+        "parent": "LeftForeArm"
+      },
+      {
+        "name": "LeftHandThumb1",
+        "parent": "LeftHand"
+      },
+      {
+        "name": "LeftHandThumb2",
+        "parent": "LeftHandThumb1"
+      },
+      {
+        "name": "LeftHandThumb3",
+        "parent": "LeftHandThumb2"
+      },
+      {
+        "name": "LeftHandThumb4",
+        "parent": "LeftHandThumb3"
+      },
+      {
+        "name": "LeftHandIndex1",
+        "parent": "LeftHand"
+      },
+      {
+        "name": "LeftHandIndex2",
+        "parent": "LeftHandIndex1"
+      },
+      {
+        "name": "LeftHandIndex3",
+        "parent": "LeftHandIndex2"
+      },
+      {
+        "name": "LeftHandIndex4",
+        "parent": "LeftHandIndex3"
+      },
+      {
+        "name": "LeftHandMiddle1",
+        "parent": "LeftHand"
+      },
+      {
+        "name": "LeftHandMiddle2",
+        "parent": "LeftHandMiddle1"
+      },
+      {
+        "name": "LeftHandMiddle3",
+        "parent": "LeftHandMiddle2"
+      },
+      {
+        "name": "LeftHandMiddle4",
+        "parent": "LeftHandMiddle3"
+      },
+      {
+        "name": "LeftHandRing1",
+        "parent": "LeftHand"
+      },
+      {
+        "name": "LeftHandRing2",
+        "parent": "LeftHandRing1"
+      },
+      {
+        "name": "LeftHandRing3",
+        "parent": "LeftHandRing2"
+      },
+      {
+        "name": "LeftHandRing4",
+        "parent": "LeftHandRing3"
+      },
+      {
+        "name": "LeftHandPinky1",
+        "parent": "LeftHand"
+      },
+      {
+        "name": "LeftHandPinky2",
+        "parent": "LeftHandPinky1"
+      },
+      {
+        "name": "LeftHandPinky3",
+        "parent": "LeftHandPinky2"
+      },
+      {
+        "name": "LeftHandPinky4",
+        "parent": "LeftHandPinky3"
+      },
+      {
+        "name": "RightShoulder",
+        "parent": "Spine2"
+      },
+      {
+        "name": "RightArm",
+        "parent": "RightShoulder"
+      },
+      {
+        "name": "RightForeArm",
+        "parent": "RightArm"
+      },
+      {
+        "name": "RightHand",
+        "parent": "RightForeArm"
+      },
+      {
+        "name": "RightHandThumb1",
+        "parent": "RightHand"
+      },
+      {
+        "name": "RightHandThumb2",
+        "parent": "RightHandThumb1"
+      },
+      {
+        "name": "RightHandThumb3",
+        "parent": "RightHandThumb2"
+      },
+      {
+        "name": "RightHandThumb4",
+        "parent": "RightHandThumb3"
+      },
+      {
+        "name": "RightHandIndex1",
+        "parent": "RightHand"
+      },
+      {
+        "name": "RightHandIndex2",
+        "parent": "RightHandIndex1"
+      },
+      {
+        "name": "RightHandIndex3",
+        "parent": "RightHandIndex2"
+      },
+      {
+        "name": "RightHandIndex4",
+        "parent": "RightHandIndex3"
+      },
+      {
+        "name": "RightHandMiddle1",
+        "parent": "RightHand"
+      },
+      {
+        "name": "RightHandMiddle2",
+        "parent": "RightHandMiddle1"
+      },
+      {
+        "name": "RightHandMiddle3",
+        "parent": "RightHandMiddle2"
+      },
+      {
+        "name": "RightHandMiddle4",
+        "parent": "RightHandMiddle3"
+      },
+      {
+        "name": "RightHandRing1",
+        "parent": "RightHand"
+      },
+      {
+        "name": "RightHandRing2",
+        "parent": "RightHandRing1"
+      },
+      {
+        "name": "RightHandRing3",
+        "parent": "RightHandRing2"
+      },
+      {
+        "name": "RightHandRing4",
+        "parent": "RightHandRing3"
+      },
+      {
+        "name": "RightHandPinky1",
+        "parent": "RightHand"
+      },
+      {
+        "name": "RightHandPinky2",
+        "parent": "RightHandPinky1"
+      },
+      {
+        "name": "RightHandPinky3",
+        "parent": "RightHandPinky2"
+      },
+      {
+        "name": "RightHandPinky4",
+        "parent": "RightHandPinky3"
+      },
+      {
+        "name": "LeftUpLeg",
+        "parent": "Hips"
+      },
+      {
+        "name": "LeftLeg",
+        "parent": "LeftUpLeg"
+      },
+      {
+        "name": "LeftFoot",
+        "parent": "LeftLeg"
+      },
+      {
+        "name": "LeftToeBase",
+        "parent": "LeftFoot"
+      },
+      {
+        "name": "LeftToe_End",
+        "parent": "LeftToeBase"
+      },
+      {
+        "name": "RightUpLeg",
+        "parent": "Hips"
+      },
+      {
+        "name": "RightLeg",
+        "parent": "RightUpLeg"
+      },
+      {
+        "name": "RightFoot",
+        "parent": "RightLeg"
+      },
+      {
+        "name": "RightToeBase",
+        "parent": "RightFoot"
+      },
+      {
+        "name": "RightToe_End",
+        "parent": "RightToeBase"
+      }
+    ],
+    "unweighted_vertices": 0,
+    "max_weight_sum_error": 4.470348358154297e-08
+  },
+  "root_representation": "FBX eRoot / UE Root is Blender armature object Root; 65 deform bones plus this root represent all 66 UE nodes. No duplicate root added.",
+  "texture_pixels": [
+    {
+      "name": "T_ShopOwner_BaseColor",
+      "size": [
+        4096,
+        4096
+      ],
+      "source_pixels_sha256": "f888eb88a3a532a7676c033549205ce8c5bd64a334b9adefd9f021d40af99a73",
+      "png_pixels_sha256": "f888eb88a3a532a7676c033549205ce8c5bd64a334b9adefd9f021d40af99a73"
+    },
+    {
+      "name": "T_ShopOwner_Normal",
+      "size": [
+        4096,
+        4096
+      ],
+      "source_pixels_sha256": "fa974739ae2f789de6f7364bdd43174bdf99a78d200f99efc8c33b90b2901941",
+      "png_pixels_sha256": "fa974739ae2f789de6f7364bdd43174bdf99a78d200f99efc8c33b90b2901941"
+    },
+    {
+      "name": "T_ShopOwner_ORM",
+      "size": [
+        4096,
+        4096
+      ],
+      "source_pixels_sha256": "8fd6bd2a42088426f4ed1f1779424cc8c7bbe1c1a1c35fe512aa053aa5aa5619",
+      "png_pixels_sha256": "8fd6bd2a42088426f4ed1f1779424cc8c7bbe1c1a1c35fe512aa053aa5aa5619"
+    }
+  ],
+  "limits": [
+    "Original contributor DCC/sculpt/modifier history unavailable.",
+    "ShopOwner.fbx is untouched official Unreal LOD0 mesh export, not a Blender re-export.",
+    "Blender Root armature object plus 65 bones represent the 66 Unreal skeleton nodes. Do not add a duplicate Root.",
+    "Blender shader is a preview approximation; no automatic production reimport is implied.",
+    "Animation FBX contains the exported baked sequence, not Unreal montage timing, AnimBP, IK, physics or gameplay. Those remain in Content.",
+    "Official FBX material metadata retains unavailable contributor texture paths. Portable texture linkage is supplied by the packed Blender material and Textures/ PNG files; raw FBX alone does not embed those images."
+  ],
+  "reach_adaptation": {
+    "source": "/Game/RecordShop/Animation/Player/Sequences/A_ShopOwner_SendingFax_01",
+    "source_preserved": true,
+    "frames": 132,
+    "fps": 60,
+    "duration_seconds": 2.2,
+    "source_peak_seconds": {
+      "RecordReach": 3.5,
+      "TonearmReach": 3.35,
+      "CoverReach": 3.35,
+      "RPMAdjust": 3.35
+    },
+    "hold_seconds": 0.2,
+    "authoring": "UE5.8 AnimDataController FK keys adapted from preserved SendingFax source. Original torso/shoulder performance retained. Offline two-bone contact solve plus palm orientation; no runtime IK. Cover follows actual lid edge; RPM has up to32deg wrist yaw twist.",
+    "runtime_ik": false,
+    "player_walk_cm_s": 210,
+    "walk_sample_play_rate": 0.7,
+    "mesh_blend_fbx_unchanged": true,
+    "micro_polish": {
+      "cover_reach_seconds": 0.35,
+      "other_reach_seconds": 0.95,
+      "recovery_end_seconds": 2.2,
+      "rpm_wrist_twist_degrees": 32,
+      "runtime_ik": false,
+      "table_turntable_z_delta_cm": 0,
+      "contact_wrist_component_cm": {
+        "RecordReach_left": [
+          20,
+          50,
+          114.8
+        ],
+        "RecordReach_right": [
+          -12,
+          50,
+          114.8
+        ],
+        "TonearmReach_left": [
+          30,
+          48,
+          114
+        ],
+        "RPMAdjust_left": [
+          35,
+          37,
+          114.2
+        ]
+      },
+      "cover_contact": "Existing lid local front edge (-24,-33.75,15); finger approaches edge. Mechanical open timing remains authoritative."
+    }
+  }
+}
