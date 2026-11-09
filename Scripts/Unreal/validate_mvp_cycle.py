@@ -1,6 +1,6 @@
 """Observe one contiguous production cycle; no downstream function/event injection.
 
-Authored Customer01 dialogue and catalogue are used unchanged. Enhanced Input IA_Interact,
+Tutorial instructions, original C01 presentation and shared catalogue are used. Enhanced Input IA_Interact,
 Slate navigation/Enter and native Windows Enter messages are synthetic.
 Use --rendered --windowed for native Result Enter or --result-navigation for
 NullRHI virtual-user Tab/Enter. Both assert production focus without setting it.
@@ -34,18 +34,14 @@ SU='/Game/RecordShop/UI/RecordSelection/WBP_RecordSelect'
 TU='/Game/RecordShop/UI/Turntable/WBP_Turntable'
 RU='/Game/RecordShop/UI/Result/WBP_Result_IntegrationFallback'
 CUSTOMER='/Game/RecordShop/Characters/Customers/Common/BP_Customer'
-R={'complete':False,'pass':False,'started_utc':datetime.now(timezone.utc).isoformat(),'stages':[],'compiles':{},'fixture':'production authored Customer01 content; no generated or saved fixture','input':'synthetic Enhanced Input IA_Interact + synthetic Slate Enter; Result uses native Windows Enter or virtual Slate Tab/Enter with production focus asserted; pawn positioned for collision; customer route untouched'}
+R={'complete':False,'pass':False,'started_utc':datetime.now(timezone.utc).isoformat(),'stages':[],'compiles':{},'fixture':'production TUTORIAL instructions, C01 presentation and shared catalogue; no saved fixture','input':'synthetic Enhanced Input IA_Interact + synthetic Slate Enter; Result uses native Windows Enter or virtual Slate Tab/Enter with production focus asserted; pawn positioned for collision; customer route untouched'}
 CHOICE=int(os.environ.get('MVP_RECORD_CHOICE','1'))
 assert CHOICE in (1,2,3)
 EXPECTED_SCORE={1:3,2:2,3:0}[CHOICE]
 EXPECTED_CATEGORY={1:'최고의 선택',2:'좋은 선택',3:'아쉬운 선택'}[CHOICE]
-OWNER_LINES=[
- '젊은 친구, 자네도 그렇게 생각하나?',
- '아니, 요즘 화제가 되는 사회적 이슈 모르나? 요새 젊은이들로부터 취업이 예전만큼 되지 않는다는 얘기를 들었네.',
- '정말 버르장머리 없는 소리이지 않나?',
- '자기네들이 열심히 하지 않는 것은 생각하지 않고 남탓만 할 줄 알고, 하여간 요즘 얘들은 말이야, 쯧쯧.',
- '어이, 젊은 친구, 빨리 음악이나 틀어보게. 지금 내 마음 속 불쾌감을 씻어내야 겠어.',
-]
+from narrative_validation_support import text_literal,struct_value
+import json
+OWNER_LINES=[text_literal(row['Text']) for row in json.loads(unreal.DataTableFunctionLibrary.export_data_table_to_json_string(unreal.load_asset('/Game/RecordShop/Data/Narrative/DT_TutorialDialogue')))]
 R['record_choice']=CHOICE
 if NATIVE_UI:
  assert os.environ.get('MVP_RESULT_NAVIGATION')!='1', 'Native UI requires --rendered --windowed'
@@ -277,6 +273,9 @@ def run():
   yield
  state(1);customer=flow.get_editor_property('ActiveCustomer');assert customer
  manager=flow.get_editor_property('DialogueManagerRef');assert manager.get_editor_property('CurrentLineIndex')==1
+ assert str(struct_value(flow.get_editor_property('ActiveCustomer').get_editor_property('CustomerProfile'),'CustomerID'))=='TUTORIAL'
+ assert list(map(str,manager.get_editor_property('DialogueList')))==['TUTORIAL_%02d'%i for i in range(1,6)]
+ assert str(manager.get_editor_property('ActiveSequenceID'))=='TUTORIAL_Training'
  assert manager.get_editor_property('CurrentCustomer').export_text()==customer.get_editor_property('CustomerProfile').export_text()
  assert manager.get_editor_property('CurrentMood')=='Quiet'
  assert len(widgets(DU))==1;mark('Spawn -> entry -> Ready -> StartDialogue -> UI',line_index=1)
@@ -333,20 +332,20 @@ def run():
   position=unreal.SlateLibrary.local_to_absolute(geometry,unreal.Vector2D(0,0))
   size=unreal.SlateLibrary.get_local_size(geometry)
   R.setdefault('dialogue_next_geometry',[]).append({'line':len(seen_lines)+1,'position':[position.x,position.y],'size':[size.x,size.y],'available':size.x>0 and size.y>0})
-  assert speaker=='중년 손님' and text.strip()
+  assert speaker=='연습 손님' and text.strip()
   seen_lines.append(text)
   R['authored_lines_observed']=seen_lines;save()
   assert len(seen_lines)<=len(OWNER_LINES)
   yield from capture('dialogue-line-'+str(len(seen_lines)))
   yield from click(dialogue,'Next')
- assert seen_lines==OWNER_LINES, 'Runtime dialogue differs from the owner text'
+ assert seen_lines==OWNER_LINES, 'Runtime dialogue differs from the tutorial source'
  if '-nullrhi' not in unreal.SystemLibrary.get_command_line().lower():
   positions=[s['position'] for s in R['dialogue_next_geometry'] if s['available']]
   if positions:
    assert len(positions)==len(OWNER_LINES), 'Inconsistent cached geometry availability'
    assert all(abs(p[0]-positions[0][0])<.5 and abs(p[1]-positions[0][1])<.5 for p in positions), 'Next button moved with dialogue length'
   else:R['dialogue_next_position_validation']='Cached Slate geometry unavailable; exact position must be verified from the five rendered screenshots, not zero-valued metadata.'
- assert [str(k) for k in manager.get_editor_property('DialogueList')]==['C01_Quiet_%02d'%i for i in range(1,6)]
+ assert not manager.get_editor_property('DialogueList') and manager.get_editor_property('ActiveDialogueSource') is None and manager.get_editor_property('PendingDialogueSource') is None
  R['authored_lines_observed']=seen_lines;save()
  assert not widgets(DU);state(2);assert not pc.get_editor_property('show_mouse_cursor');mark('Next -> finished -> RecordSelection')
  assert pc.get_view_target()==pawn, 'Dialogue did not restore player camera'

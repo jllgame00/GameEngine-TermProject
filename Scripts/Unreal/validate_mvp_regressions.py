@@ -482,11 +482,13 @@ def production_audio_replay_checks(world, turntable_class, source_record, result
                 assert 'FADING_OUT' in str(audio.get_play_state()), str(audio.get_play_state())
             # Do not keep or compare an AudioComponent proxy after completion.
             audio = None
-            deadline=time.monotonic()+40
+            playback_wait_started=time.monotonic()
+            playback_world_started=unreal.GameplayStatics.get_time_seconds(world)
+            deadline=playback_wait_started+40
             while not actor.get_editor_property('CompletionSent'):
                 if time.monotonic()>=deadline:
                     active=actor.get_editor_property('PlaybackAudio')
-                    observations.append({'timeout_repeat':repeat+1,'sound_duration':sound.get_editor_property('duration'),'audio_state':str(active.get_play_state()) if active else None,'turntable_step':actor.get_editor_property('TurntableStep'),'motion_alpha':actor.get_editor_property('TonearmMotionAlpha'),'world_time':unreal.GameplayStatics.get_time_seconds(world)})
+                    observations.append({'timeout_repeat':repeat+1,'sound_duration':sound.get_editor_property('duration'),'audio_state':str(active.get_play_state()) if active else None,'turntable_step':actor.get_editor_property('TurntableStep'),'motion_alpha':actor.get_editor_property('TonearmMotionAlpha'),'world_time':unreal.GameplayStatics.get_time_seconds(world),'wall_wait_seconds':time.monotonic()-playback_wait_started,'world_wait_seconds':unreal.GameplayStatics.get_time_seconds(world)-playback_world_started})
                     raise AssertionError('Natural production LP completion timed out')
                 yield
             assert actor.get_editor_property('PlaybackAudio') is None
@@ -496,6 +498,8 @@ def production_audio_replay_checks(world, turntable_class, source_record, result
             observations.append({'repeat':repeat+1,'sound':sound.get_path_name(),'one_component':True,'contact_before_audio':True,'completion':'early fade then physical return' if repeat==0 else 'full natural audio finished callback after reset',
                                  'component_path':audio_path,'before_reset_playback':before,
                                  'during_playback':voices,'after_completion':stopped,
+                                 'wall_wait_seconds':time.monotonic()-playback_wait_started,
+                                 'world_wait_seconds':unreal.GameplayStatics.get_time_seconds(world)-playback_world_started,
                                  'completed_component':'live and stopped' if audio_path in stopped else 'absent from live components'})
         result['isolated']['production_music_fade_reset_replay']={'pass':True,'observations':observations,'limit':'Isolated direct Turntable commands; all natural recommendation paths are validated separately.'}
     except Exception:
@@ -769,7 +773,8 @@ def run():
  # Isolated backend diagnostics disable scheduling on this unsaved live actor only.
  # Full natural cycles and week simulation exercise the default enabled schedule.
  flow.set_editor_property('EnableDaySchedule',False)
- R['day_fixture']='unsaved EnableDaySchedule=False for isolated backend calls only'
+ flow.set_editor_property('EnableNarrativeRouting',False)
+ R['day_fixture']='unsaved EnableDaySchedule=False and EnableNarrativeRouting=False for isolated legacy backend calls only'
  from prologue_validation_support import exercise_opening
  def advance_opening(panel):
   click(panel,'Continue')

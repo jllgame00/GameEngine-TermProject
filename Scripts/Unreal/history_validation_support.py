@@ -1,4 +1,4 @@
-﻿"""Assertions for live history production tests; never writes history/day authority."""
+"""Assertions for live history production tests; never writes history/day authority."""
 import unreal
 FIELDS=('CustomerID','VisitNumber','Day','RecordID','RecommendationScore','RecommendationResult','Sequence')
 def payload(entry):
@@ -37,6 +37,8 @@ class MemoryChecks:
    self.entries.append(dict(CustomerID=identity,VisitNumber=number,Day=day,RecordID='RS00'+str(choice),RecommendationScore={1:3,2:2,3:0}[choice],RecommendationResult={1:'BEST',2:'GOOD',3:'POOR'}[choice],Sequence=len(self.entries)+1))
   assert len(flow.get_editor_property('RecommendationHistory'))==len(self.entries)
   expected_entries=[x for x in self.entries if x['CustomerID']==identity]
+  for entry in expected_entries:
+   ok,record=flow.get_editor_property('RecordCatalogue').call_method('ResolveRecord',args=(entry['RecordID'],));assert ok
   assert self.query(flow,identity)==expected_entries
   for _ in range(3):flow.call_method('HandleTurntableCompleted');flow.call_method('CommitRecommendationHistory')
   flow.call_method('ResetRecommendationHistory')

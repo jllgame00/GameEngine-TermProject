@@ -7,6 +7,8 @@ from pathlib import Path
 import unreal
 ROOT=Path(unreal.Paths.project_dir());sys.path.insert(0,str(ROOT/'Scripts/Unreal'))
 from day_graph_helpers import *
+from narrative_validation_support import digest,struct_value
+REFERENCE=json.loads((ROOT/'Scripts/Unreal/narrative_reference_baseline.json').read_text(encoding='utf8'))
 HISTORY_TEST=os.environ.get('MVP_HISTORY_VALIDATION')=='1'
 if HISTORY_TEST:
  from history_validation_support import MemoryChecks
@@ -103,7 +105,7 @@ def run():
   current_day=flow.get_editor_property('CurrentDay');visit=flow.get_editor_property('ActiveVisit')
   if index==0:
    assert current_day==0 and visit is None and not flow.get_editor_property('TutorialComplete')
-   expected=('C01',0,0,0)
+   expected=('TUTORIAL',0,0,0)
   else:
    expected=EXPECTED[index-1];assert flow.get_editor_property('TutorialComplete')
    actual=(str(visit.get_editor_property('CustomerID')),visit.get_editor_property('VisitNumber'),current_day,visit.get_editor_property('OrderInDay'))
@@ -119,11 +121,18 @@ def run():
   for _ in range(3):
    flow.call_method('SpawnQueuedCustomer');flow.call_method('SpawnTutorialCustomer');flow.call_method('HandleCustomerExited');flow.call_method('EndCurrentDay');flow.call_method('FinishDayTransition')
   assert before==(flow.get_editor_property('CurrentDay'),flow.get_editor_property('CurrentCustomerIndex'),flow.get_editor_property('ActiveCustomer'))
-  lines=0
+  manager=flow.get_editor_property('DialogueManagerRef')
+  if index==0:assert str(struct_value(customer.get_editor_property('CustomerProfile'),'CustomerID'))=='TUTORIAL' and str(manager.get_editor_property('ActiveSequenceID'))=='TUTORIAL_Training'
+  if index==1:assert list(map(str,manager.get_editor_property('DialogueList')))==['C01_Quiet_%02d'%i for i in range(1,6)] and str(manager.get_editor_property('ActiveSequenceID'))=='A_Visit1'
+  R.setdefault('dialogue_sequences',[]).append({'customer':expected[0],'visit':expected[1],'sequence':str(manager.get_editor_property('ActiveSequenceID')),'rows':list(map(str,manager.get_editor_property('DialogueList')))})
+  lines=0;seen=[]
   while widgets(DU):
    lines+=1;assert lines<=5
+   seen.append(str(widgets(DU)[0].get_editor_property('DialogueText').get_text()))
    yield from click(widgets(DU)[0],'Next')
   assert lines==5
+  if index==1:assert digest(seen)==REFERENCE['a1_display_lines_sha256']
+  assert not manager.get_editor_property('DialogueList') and manager.get_editor_property('ActiveDialogueSource') is None and manager.get_editor_property('PendingDialogueSource') is None
   assert pc.get_view_target()==pawn and not pc.get_editor_property('show_mouse_cursor')
   yield from interact(shelf,SU)
   choice=(2 if index==1 else index%3+1) if HISTORY_TEST else index%3+1;yield from click(widgets(SU)[0],'BTN_LP0'+str(choice))
