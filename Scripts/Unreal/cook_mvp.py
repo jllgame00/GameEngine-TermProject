@@ -17,8 +17,12 @@ with (folder/(name+'-stdout.txt')).open('w',encoding='utf-8') as stream:
 text=log.read_text(encoding='utf-8',errors='replace') if log.exists() else ''
 maps=[str(x.relative_to(output)) for x in output.rglob('L_RecordShop_Greybox.umap')]
 results=[str(x.relative_to(output)) for x in output.rglob('WBP_Result_IntegrationFallback.uasset')]
+prologues=[str(x.relative_to(output)) for x in output.rglob('WBP_Prologue.uasset')]
+weeks=[str(x.relative_to(output)) for x in output.rglob('DA_TemporaryWeek.uasset')]
+days=[str(x.relative_to(output)) for x in output.rglob('DA_Day*.uasset') if x.parent.name=='Schedule']
+visits=[str(x.relative_to(output)) for x in output.rglob('DA_Visit_*.uasset') if x.parent.name=='Schedule']
 errors=[line for line in text.splitlines() if ': Error:' in line]
 log_gate=classify_log(text)
-report={'exit_code':code,'exit_hex':hex(code & 0xffffffff),'log':str(log),'cooked_maps':maps,'cooked_result_widgets':results,'errors':errors,'log_gate':log_gate,'pass':code==0 and bool(maps) and bool(results) and not errors and log_gate['gameplay_log_pass'],'package':'NOT RUN','scope':'bounded cook smoke with SkipSaveAssetRegistry'}
+report={'exit_code':code,'exit_hex':hex(code & 0xffffffff),'log':str(log),'cooked_maps':maps,'cooked_result_widgets':results,'cooked_prologue_widgets':prologues,'cooked_week_schedule':weeks,'cooked_days':days,'cooked_visits':visits,'errors':errors,'log_gate':log_gate,'pass':code==0 and bool(maps) and bool(results) and bool(prologues) and bool(weeks) and len(days)==7 and len(visits)==16 and not errors and log_gate['gameplay_log_pass'],'package':'NOT RUN','scope':'bounded cook smoke with SkipSaveAssetRegistry'}
 (folder/(name+'-process.json')).write_text(json.dumps(report,indent=2),encoding='utf-8')
 print(json.dumps(report,indent=2),flush=True);sys.exit(0 if report['pass'] else 1)
