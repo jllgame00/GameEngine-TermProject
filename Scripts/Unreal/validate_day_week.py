@@ -138,10 +138,18 @@ def run():
     e=flow.call_method('GetRecommendationForVisit',args=('B',num));return str(e.get_editor_property('RecommendationResult'))if e else None
    assert str(manager.get_editor_property('ActiveSequenceID'))=='B_V'+str(expected[1])
    assert sequence_rows==expected_b_rows(expected[1],previous_b_result(1)if expected[1]>1 else None,previous_b_result(2)if expected[1]==3 else None)
+  elif expected[0]in ('C','D'):
+   from customer_cd_validation_support import expected_cd_rows
+   prior=flow.call_method('GetRecommendationForVisit',args=(expected[0],1))if expected[1]==2 else None
+   assert str(manager.get_editor_property('ActiveSequenceID'))==expected[0]+'_V'+str(expected[1])
+   assert sequence_rows==expected_cd_rows(expected[0],expected[1],str(prior.get_editor_property('RecommendationResult'))if prior else None)
   else:assert len(sequence_rows)==5
   active_profile=customer.get_editor_property('CustomerProfile')
   profile_tags=[str(struct_value(active_profile,k))for k in ('Mood','MusicPreference','Personality')]
-  assert profile_tags==(['Restless'if expected[1]==1 else 'Quiet','Electronic','Adventurous']if expected[0]=='B'else ['Quiet','Jazz','Traditional'])
+  from customer_cd_validation_support import PROFILES
+  expected_tags=list(PROFILES[expected[0]])if expected[0]in PROFILES else ['Restless'if expected[1]==1 else 'Quiet','Electronic','Adventurous']if expected[0]=='B'else ['Quiet','Jazz','Traditional']
+  assert profile_tags==expected_tags
+  R.setdefault('runtime_profiles',[]).append({'customer':expected[0],'visit':expected[1],'tags':profile_tags})
   lines=0;seen=[]
   while widgets(DU):
    lines+=1;assert lines<=len(sequence_rows)
@@ -154,6 +162,10 @@ def run():
     capture=OUT.with_name(OUT.stem+'-B'+str(expected[1])+'-line'+str(lines)+'.png')
     unreal.SystemLibrary.execute_console_command(world,'Shot showui filename="'+str(capture)+'" -nosuffix')
     R.setdefault('b_ui_captures',[]).append(str(capture));yield from frames(4)
+   if expected[0]in ('C','D'):
+    capture=OUT.with_name(OUT.stem+'-'+expected[0]+str(expected[1])+'-line'+str(lines)+'.png')
+    unreal.SystemLibrary.execute_console_command(world,'Shot showui filename="'+str(capture)+'" -nosuffix')
+    R.setdefault('cd_ui_captures',[]).append(str(capture));yield from frames(4)
    yield from click(widgets(DU)[0],'Next')
   assert lines==len(sequence_rows)
   if expected[0]=='A'and expected[1]in (2,3):
@@ -162,11 +174,18 @@ def run():
   if expected[0]=='B':
    authored=json.loads((Path(unreal.Paths.project_dir())/'Scripts/Unreal/customer_b_dialogue.json').read_text(encoding='utf-8-sig'))['rows']
    assert seen==[authored[row]for row in sequence_rows]
+  if expected[0]in ('C','D'):
+   authored=json.loads((ROOT/'Scripts/Unreal/customer_cd_dialogue.json').read_text(encoding='utf-8-sig'))[expected[0]]['rows']
+   assert seen==[authored[row]for row in sequence_rows]
   if index==1:assert digest(seen)==REFERENCE['a1_display_lines_sha256']
   assert not manager.get_editor_property('DialogueList') and manager.get_editor_property('ActiveDialogueSource') is None and manager.get_editor_property('PendingDialogueSource') is None
   assert pc.get_view_target()==pawn and not pc.get_editor_property('show_mouse_cursor')
   yield from interact(shelf,SU)
-  choice=3 if expected[0]=='B'else (2 if index==1 else index%3+1)if HISTORY_TEST else index%3+1;yield from click(widgets(SU)[0],'BTN_LP0'+str(choice))
+  choice=(2 if index==1 else index%3+1)if HISTORY_TEST else index%3+1
+  if expected[0]=='B':choice=3
+  elif expected[0]=='C':choice=2
+  elif expected[0]=='D':choice=1 if expected[1]==1 else 3
+  yield from click(widgets(SU)[0],'BTN_LP0'+str(choice))
   from customer_b_validation_support import expected_score
   score=expected_score(expected[0],expected[1],choice)
   assert flow.get_editor_property('RawRecommendationScore')==score
@@ -183,13 +202,13 @@ def run():
   assert tt.get_editor_property('PlaybackAudio') is None
   if HISTORY_TEST:memory.result(flow,expected,index,choice)
   result=widgets(RU)[0];assert result.get_editor_property('Continue').has_keyboard_focus()
-  if expected[0]=='B':
+  if expected[0]in ('B','C','D'):
    from customer_b_validation_support import expected_result
    neutral=json.loads((Path(unreal.Paths.project_dir())/'Scripts/Unreal/preference_result_feedback.json').read_text(encoding='utf-8-sig'))
    feedback=str(result.get_editor_property('ScoreStatus').get_text());assert feedback==neutral[expected_result(score)]
-   R.setdefault('b_result_feedback',[]).append({'visit':expected[1],'score':score,'text':feedback})
-   capture=OUT.with_name(OUT.stem+'-B'+str(expected[1])+'-result.png')
-   unreal.SystemLibrary.execute_console_command(world,'Shot showui filename="'+str(capture)+'" -nosuffix');R.setdefault('b_ui_captures',[]).append(str(capture));yield from frames(4)
+   R.setdefault('b_result_feedback'if expected[0]=='B'else 'cd_result_feedback',[]).append({'customer':expected[0],'visit':expected[1],'score':score,'text':feedback})
+   capture=OUT.with_name(OUT.stem+'-'+expected[0]+str(expected[1])+'-result.png')
+   unreal.SystemLibrary.execute_console_command(world,'Shot showui filename="'+str(capture)+'" -nosuffix');R.setdefault('b_ui_captures'if expected[0]=='B'else 'cd_ui_captures',[]).append(str(capture));yield from frames(4)
   # Virtual Slate user activation; production owning-user focus is asserted above.
   yield from click(result,'Continue')
   store=flow.get_editor_property('StoreBGMRef');assert store and store.is_playing()
