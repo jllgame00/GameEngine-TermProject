@@ -509,6 +509,10 @@ def prepare_ui_contact_diagnostic(actor, pawn):
     pawn.get_component_by_class(unreal.CharacterMovementComponent).stop_movement_immediately()
     station = actor.get_actor_location() + unreal.Vector(0, -80, 2.2)
     pawn.set_actor_location_and_rotation(station, unreal.Rotator(pitch=0, yaw=90, roll=0), False, True)
+    # Production contact now reads the collision-resolved OwnerInteractionStation.
+    # Initialize it through the existing authority; never force readiness or station data.
+    actor.call_method('BeginOwnerAlignment')
+    actor.call_method('StopOwnerPresentation')
     actor.call_method('EvaluateOwnerContact')
     assert actor.get_editor_property('OwnerContactReady'), ('Actual diagnostic station is not ready',
         pawn.get_actor_location().export_text(), station.export_text(),
@@ -759,6 +763,16 @@ def run():
  global world,flow,pawn,pc
  while not editor.get_game_world():yield
  world=editor.get_game_world();flow=unreal.GameplayStatics.get_all_actors_of_class(world,cls(FLOW))[0];pawn=unreal.GameplayStatics.get_player_pawn(world,0);pc=unreal.GameplayStatics.get_player_controller(world,0)
+ from prologue_validation_support import exercise_opening
+ def advance_opening(panel):
+  click(panel,'Continue')
+  for _ in range(4):yield
+ R['opening']=yield from exercise_opening(world,flow,pc,pawn,advance_opening)
+ # Isolated diagnostics may directly probe idempotency; contiguous E2E never does.
+ for _ in range(3):flow.call_method('AdvancePrologue')
+ assert flow.get_editor_property('PrologueStage')==3
+ flow.call_method('CompleteTutorial')
+ assert not flow.get_editor_property('TutorialComplete')
  while not widgets(DU):
   assert time.monotonic()-start<70
   yield

@@ -70,7 +70,7 @@ try:
  font_path='/Game/RecordShop/UI/Fonts/NanumGothic_Font'
  assert font_path in R['packages'] and '/Game/RecordShop/UI/Fonts/NanumGothic' in R['packages']
  ui_text=[]
- for suffix in ('Dialogue/WBP_Dialogue','RecordSelection/WBP_RecordSelect','Turntable/WBP_Turntable','Result/WBP_Result_IntegrationFallback'):
+ for suffix in ('Dialogue/WBP_Dialogue','RecordSelection/WBP_RecordSelect','Turntable/WBP_Turntable','Result/WBP_Result_IntegrationFallback','Prologue/WBP_Prologue'):
   widget_bp=unreal.load_asset('/Game/RecordShop/UI/'+suffix)
   tree=next(t for t in unreal.ObjectIterator(unreal.WidgetTree) if t.get_outer()==widget_bp)
   for widget in unreal.ObjectIterator(unreal.Widget):
@@ -82,6 +82,7 @@ try:
    latin=re.findall(r'[A-Za-z]+',text)
    assert all(word in ('LP','Esc','RPM') for word in latin),(widget.get_name(),text)
    ui_text.append({'widget':suffix,'name':widget.get_name(),'text':text})
+ assert '/Game/RecordShop/UI/Prologue/WBP_Prologue' in R['packages']
  assert not any('Mina' in str(row) for row in rows)
  R['korean_ui']={'texts':ui_text,'allowed_latin':['LP (record format)','Esc (keyboard key)','RPM (rotation speed)'],'cooked_font':font_path}
  # Physical presentation must survive a fresh asset load and cook, not just PIE overrides.

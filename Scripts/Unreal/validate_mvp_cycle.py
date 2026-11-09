@@ -237,7 +237,17 @@ if NATIVE_UI:
  user32.ShowWindow(hwnd,9)
  assert user32.SetWindowPos(hwnd,None,0,0,width,height,0x16),ctypes.get_last_error()
  R['native_window_size']=[width,height];save()
-unreal.EditorPythonScripting.set_keep_python_script_alive(True);level.editor_request_begin_play()
+unreal.EditorPythonScripting.set_keep_python_script_alive(True)
+if IMMERSIVE:
+ # F11 layout + native window resize are test setup, not gameplay. Let Slate
+ # settle them before requesting PIE; do not overlap their deferred focus work.
+ _viewport_settle_started=time.monotonic()
+ def _begin_after_viewport_settles(delta):
+  if time.monotonic()-_viewport_settle_started>.5:
+   unreal.unregister_slate_post_tick_callback(_begin_handle)
+   level.editor_request_begin_play()
+ _begin_handle=unreal.register_slate_post_tick_callback(_begin_after_viewport_settles)
+else:level.editor_request_begin_play()
 start=time.monotonic();phase={'generator':None,'end':None}
 
 def run():
@@ -246,6 +256,16 @@ def run():
  world=editor.get_game_world();flow=unreal.GameplayStatics.get_all_actors_of_class(world,cls(FLOW))[0]
  pc=unreal.GameplayStatics.get_player_controller(world,0);pawn=unreal.GameplayStatics.get_player_pawn(world,0)
  mark('Greybox startup')
+ interaction=None
+ if not NATIVE_UI:
+  interaction=pawn.call_method('AddComponentByClass',args=(unreal.WidgetInteractionComponent.static_class(),False,unreal.Transform(),False))
+  interaction.set_component_tick_enabled(False);interaction.activate(True)
+ from prologue_validation_support import exercise_opening
+ def advance_opening(panel):
+  if NATIVE_UI:yield from native_enter()
+  else:yield from click(panel,'Continue')
+ R['opening']=yield from exercise_opening(world,flow,pc,pawn,advance_opening,capture)
+ save()
  entry_captured=False
  while not widgets(DU):
   assert time.monotonic()-start<70,'Customer did not naturally reach dialogue'
@@ -303,10 +323,6 @@ def run():
  # Save after the player's initial gravity settling, before interaction geometry
  # changes its movement mode or location. The spawn-frame Z is not a floor pose.
  startup_location=pawn.get_actor_location();startup_rotation=pawn.get_actor_rotation();startup_control_rotation=pc.get_control_rotation()
- interaction=None
- if not NATIVE_UI:
-  interaction=pawn.call_method('AddComponentByClass',args=(unreal.WidgetInteractionComponent.static_class(),False,unreal.Transform(),False))
-  interaction.set_component_tick_enabled(False);interaction.activate(True)
  seen_lines=[]
  while widgets(DU):
   dialogue=widgets(DU)[0]
@@ -571,6 +587,9 @@ def run():
   # reference; a retained Python proxy may already have been collected by UE.
   active_audio=tt.get_editor_property('PlaybackAudio')
   playing=bool(active_audio and active_audio.is_playing())
+  hint=flow.get_editor_property('TutorialHintRef')
+  if playing and time.monotonic()>deadline-49.6:
+   assert hint is None or hint.get_visibility()==unreal.SlateVisibility.COLLAPSED, 'Tutorial hint interrupts Listening'
   label='selected-LP-playing' if playing and returning>=1 else ('tonearm-lifting' if returning<0.35 else 'tonearm-returning')
   rot=tt.get_editor_property('TonearmPivot').get_editor_property('relative_rotation')
   R.setdefault('natural_playback_motion',[]).append({'stage':label,'roll':rot.roll,'yaw':rot.yaw,'return_alpha':returning,'remaining':remaining,'audio_playing':playing})
@@ -609,6 +628,7 @@ def run():
   assert pc.get_view_target()==flow.get_editor_property('ResultCamera'), 'Result camera changed while waiting for Continue'
   assert result.get_editor_property('Continue').has_keyboard_focus(), 'Result lost production keyboard focus'
   yield
+ assert not flow.get_editor_property('TutorialComplete'), 'Tutorial completed before Result Continue'
  before=customer.get_actor_location();yield from continue_with_default_focus(result)
  assert not widgets(RU);assert flow.get_editor_property('ResultSubmitted');assert not pc.get_editor_property('show_mouse_cursor')
  mark('Result Continue -> FinishResult -> customer exit route',before_exit=str(before))
@@ -621,6 +641,7 @@ def run():
  exit_captured=False
  exit_view_frames=0
  while flow.get_editor_property('ActiveCustomer'):
+  assert not flow.get_editor_property('TutorialComplete'), 'Tutorial completed before customer exit'
   assert time.monotonic()-start<150,'Exit route did not finish'
   sample=observe_customer('exit',exit_view_frames<4)
   exit_view_frames+=1
@@ -632,7 +653,9 @@ def run():
  assert max(s['speed_xy'] for s in R['customer_observations']) <= 181, 'Customer exceeded measured walking pace'
  state(0);no_modals();assert not pc.get_editor_property('show_mouse_cursor');assert flow.get_editor_property('DialogueWidgetRef') is None;assert flow.get_editor_property('ResultWidgetRef') is None
  assert pc.get_view_target()==pawn, 'Result did not restore player camera'
- mark('CustomerExited -> ActiveCustomer cleared -> Explore',after_exit=str(customer.get_actor_location()))
+ assert flow.get_editor_property('TutorialComplete') and flow.get_editor_property('PrologueStage')==5
+ assert flow.get_editor_property('TutorialResultSubmitted')
+ mark('CustomerExited -> ActiveCustomer cleared -> Explore',after_exit=str(customer.get_actor_location()),tutorial_complete=True)
  yield from capture('explore')
  # Exercise restored game input rather than only checking cursor/camera flags.
  lib=unreal.get_default_object(unreal.load_class(None,'/Script/Engine.SubsystemBlueprintLibrary'))
@@ -659,6 +682,24 @@ def run():
   yield from capture('wide-store-diagnostic-camera')
   pc.set_view_target_with_blend(pawn,0);camera.destroy_actor()
   R.setdefault('viewpoint_observations',[]).append({'stage':'wide-store','provenance':'Temporary diagnostic camera after completed natural Explore; restored player view; no asset saves or gameplay state changes'})
+ # New opening guidance must also respect existing modals after completion.
+ yield from interact(shelf,SU)
+ until=time.monotonic()+.35
+ while time.monotonic()<until:yield
+ hint=flow.get_editor_property('TutorialHintRef')
+ assert hint is None or hint.get_visibility()==unreal.SlateVisibility.COLLAPSED, 'Completed hint overlaps Record Selection'
+ R['post_tutorial_modal_suppression']=True;save()
+ if NATIVE_UI:yield from native_enter(0x1B,0x01)
+ else:
+  escape=unreal.Key();escape.import_text('Escape');interaction.press_and_release_key(escape)
+  yield from wait_frames(8)
+ assert not widgets(SU) and not pc.get_editor_property('show_mouse_cursor') and pc.get_view_target()==pawn
+ until=time.monotonic()+6.5
+ while flow.get_editor_property('TutorialHintRef'):
+  assert time.monotonic()<until, 'Completed hint/timer was not released'
+  yield
+ assert flow.get_editor_property('TutorialComplete') and flow.get_editor_property('ActiveCustomer') is None
+ R['tutorial_hint_released']=True;save()
  if interaction:interaction.destroy_component(pawn)
  R['pass']=True;R['complete']=True;save()
 
