@@ -1,4 +1,4 @@
-﻿"""One continuous production week: actual navigation/exit, Slate UI, ten-second audio.
+"""One continuous production week: actual navigation/exit, Slate UI, ten-second audio.
 Only player approach geometry is a fixture. No day/index/exit/completion state writes.
 Direct calls only probe rejection of duplicates and premature day/exit transitions.
 """
@@ -7,6 +7,10 @@ from pathlib import Path
 import unreal
 ROOT=Path(unreal.Paths.project_dir());sys.path.insert(0,str(ROOT/'Scripts/Unreal'))
 from day_graph_helpers import *
+HISTORY_TEST=os.environ.get('MVP_HISTORY_VALIDATION')=='1'
+if HISTORY_TEST:
+ from history_validation_support import MemoryChecks
+ memory=MemoryChecks()
 OUT=Path(os.environ['MVP_RESULT']);R={'complete':False,'pass':False,'cycles':[],'spawns':[],'scope':'production Prologue + tutorial + all 16 visits; real navigation, Slate buttons and audio; player geometry fixtures; direct calls only test rejection guards'}
 FLOW='/Game/RecordShop/Core/Flow/BP_GameFlowManager';FC=FLOW+'.BP_GameFlowManager_C'
 CUSTOMER='/Game/RecordShop/Characters/Customers/Common/BP_Customer'
@@ -52,14 +56,18 @@ def interact(actor,path):
 # Unsaved observer records the actual production dispatchers, including duplicates.
 factory=unreal.BlueprintFactory();factory.set_editor_property('parent_class',unreal.Actor)
 probe=unreal.AssetToolsHelpers.get_asset_tools().create_asset('BP_DayObserver','/Game/RecordShop/Dev/DayValidation',unreal.Blueprint,factory)
-for name,kind in [('StartedDays','int'),('EndedDays','int'),('FinishedIDs','name'),('FinishedVisits','int'),('FinalEvents','name')]:assert L.add_member_variable(probe,name,L.get_array_type(L.get_basic_type_by_name(kind)))
+observer_fields=[('StartedDays','int'),('EndedDays','int'),('FinishedIDs','name'),('FinishedVisits','int'),('FinalEvents','name')]
+if HISTORY_TEST:observer_fields += [('MemoryIDs','name'),('MemoryVisits','int'),('MemoryPrevious','bool')]
+for name,kind in observer_fields:assert L.add_member_variable(probe,name,L.get_array_type(L.get_basic_type_by_name(kind)))
 assert L.compile_blueprint(probe)
 events=[]
-for dispatcher,parameters,fields in [
+event_specs=[
  ('OnDayStarted',[('Day',L.get_basic_type_by_name('int'))],[('StartedDays','Day')]),
  ('OnDayEnded',[('Day',L.get_basic_type_by_name('int'))],[('EndedDays','Day')]),
  ('OnCustomerVisitCompleted',[('Visit',L.get_object_reference_type(unreal.load_class(None,VC)))],[('FinishedIDs','CustomerID'),('FinishedVisits','VisitNumber')]),
- ('OnFinalStoryEvent',[('EventID',L.get_basic_type_by_name('name'))],[('FinalEvents','EventID')])]:
+ ('OnFinalStoryEvent',[('EventID',L.get_basic_type_by_name('name'))],[('FinalEvents','EventID')])]
+if HISTORY_TEST:event_specs.append(('OnRevisitMemoryReady',[('CustomerID',L.get_basic_type_by_name('name')),('VisitNumber',L.get_basic_type_by_name('int')),('HasPrevious',L.get_basic_type_by_name('bool'))],[('MemoryIDs','CustomerID'),('MemoryVisits','VisitNumber'),('MemoryPrevious','HasPrevious')]))
+for dispatcher,parameters,fields in event_specs:
  event=signature_event(probe,'Observe'+dispatcher,parameters);g=evgraph(probe);end=event.find_then_pin()
  for member,source in fields:
   value=field(g,pin(event,'Visit',True),source,VC) if dispatcher=='OnCustomerVisitCompleted' else pin(event,source,True)
@@ -72,7 +80,7 @@ for name,event in events:
 assert L.compile_blueprint(probe);observer=unreal.get_default_object(probe.generated_class());bind_name=str(observer_bind.get_node_title())
 
 def observed():
- return {key:[str(x) if key in ('FinishedIDs','FinalEvents') else int(x) for x in observer.get_editor_property(key)] for key in ('StartedDays','EndedDays','FinishedIDs','FinishedVisits','FinalEvents')}
+ return {key:[str(x) if key in ('FinishedIDs','FinalEvents','MemoryIDs') else int(x) for x in observer.get_editor_property(key)] for key in (['StartedDays','EndedDays','FinishedIDs','FinishedVisits','FinalEvents']+(['MemoryIDs','MemoryVisits','MemoryPrevious'] if HISTORY_TEST else []))}
 level=unreal.get_editor_subsystem(unreal.LevelEditorSubsystem);editor=unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
 assert level.load_level('/Game/RecordShop/Maps/Greybox/L_RecordShop_Greybox')
 unreal.EditorPythonScripting.set_keep_python_script_alive(True);level.editor_request_begin_play();started=time.monotonic();phase={'gen':None,'end':None,'busy':False}
@@ -103,6 +111,7 @@ def run():
    assert flow.get_editor_property('CurrentCustomerIndex')==expected[3]-1
    profile=customer.get_editor_property('CustomerProfile');field_name=re.search(r'CustomerID_[A-Za-z0-9_]+(?==)',profile.export_text()).group(0)
    assert str(profile.get_editor_property(field_name))==expected[0],profile.export_text()
+  if HISTORY_TEST:memory.before(flow,expected,index)
   actor_path=customer.get_path_name();assert actor_path not in [x['actor'] for x in R['spawns']]
   R['spawns'].append({'actor':actor_path,'id':expected[0],'visit':expected[1],'day':expected[2],'order':expected[3]});R['events']=observed();save();unreal.log('DAY_VALIDATION_VISIT '+str(expected))
   # Direct negative probes must not advance or produce another pawn.
@@ -117,9 +126,10 @@ def run():
   assert lines==5
   assert pc.get_view_target()==pawn and not pc.get_editor_property('show_mouse_cursor')
   yield from interact(shelf,SU)
-  choice=index%3+1;yield from click(widgets(SU)[0],'BTN_LP0'+str(choice))
+  choice=(2 if index==1 else index%3+1) if HISTORY_TEST else index%3+1;yield from click(widgets(SU)[0],'BTN_LP0'+str(choice))
   assert flow.get_editor_property('RawRecommendationScore')=={1:3,2:2,3:0}[choice]
   assert 'RS00'+str(choice) in tt.get_editor_property('CurrentRecord').export_text()
+  if HISTORY_TEST:memory.selected(flow)
   yield from interact(tt,TU);panel=widgets(TU)[0]
   for button in ('BTN_OpenLid','BTN_PlaceRecord','BTN_SelectRPM','BTN_RPM33','BTN_MoveTonearm','BTN_Play'):
    yield from wait(lambda:panel.get_editor_property(button).get_is_enabled(),8)
@@ -129,6 +139,7 @@ def run():
   yield from wait(lambda:len(widgets(RU))==1,16)
   elapsed=unreal.GameplayStatics.get_time_seconds(world)-listen_start;assert 9.5<=elapsed<=14,elapsed
   assert tt.get_editor_property('PlaybackAudio') is None
+  if HISTORY_TEST:memory.result(flow,expected,index,choice)
   result=widgets(RU)[0];assert result.get_editor_property('Continue').has_keyboard_focus()
   # Virtual Slate user activation; production owning-user focus is asserted above.
   yield from click(result,'Continue')
@@ -155,7 +166,25 @@ def run():
   sub.inject_input_vector_for_action(unreal.load_asset('/Game/Input/Actions/IA_Move'),unreal.Vector(0,-.25,0),[],[]);yield
  assert (pawn.get_actor_location()-before).length()>5
  R.update(complete=True,**{'pass':True},events=events,final_day=7,queue_visits=16,tutorial_customers=1)
- interaction.destroy_component(pawn);save()
+ if HISTORY_TEST:
+  interaction.destroy_component(pawn)
+  R['complete']=False;R['pass']=False
+  R['history']=memory.finish(flow)
+  assert events['MemoryIDs']==[x[0] for x in EXPECTED] and events['MemoryVisits']==[x[1] for x in EXPECTED]
+  assert events['MemoryPrevious']==[int(x[1]>1) for x in EXPECTED]
+  # A New Game is a fresh world/manager, exactly as production map startup.
+  level.editor_request_end_play()
+  while editor.get_game_world():yield
+  level.editor_request_begin_play()
+  while not editor.get_game_world():yield
+  fresh_world=editor.get_game_world();fresh=unreal.GameplayStatics.get_all_actors_of_class(fresh_world,cls(FLOW))[0]
+  assert not fresh.get_editor_property('RecommendationHistory') and fresh.get_editor_property('CurrentDay')==0 and not fresh.get_editor_property('TutorialComplete')
+  for identity in ('A','B','C','D','E','F','G','H'):
+   assert not fresh.call_method('HasPreviousVisit',args=(identity,)) and not fresh.call_method('GetRecommendationHistory',args=(identity,))
+  R['history']['new_game_fresh_session_empty']=True
+  R['complete']=True;R['pass']=True
+ if not HISTORY_TEST:interaction.destroy_component(pawn)
+ save()
 
 def tick(delta):
  if phase['busy']:return
