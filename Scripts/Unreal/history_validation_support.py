@@ -1,5 +1,6 @@
 """Assertions for live history production tests; never writes history/day authority."""
 import unreal
+from customer_b_validation_support import expected_score,expected_result
 FIELDS=('CustomerID','VisitNumber','Day','RecordID','RecommendationScore','RecommendationResult','Sequence')
 def payload(entry):
  if entry is None:return None
@@ -34,7 +35,7 @@ class MemoryChecks:
  def result(self,flow,expected,index,choice):
   identity,number,day,_=expected
   if index:
-   self.entries.append(dict(CustomerID=identity,VisitNumber=number,Day=day,RecordID='RS00'+str(choice),RecommendationScore={1:3,2:2,3:0}[choice],RecommendationResult={1:'BEST',2:'GOOD',3:'POOR'}[choice],Sequence=len(self.entries)+1))
+   self.entries.append(dict(CustomerID=identity,VisitNumber=number,Day=day,RecordID='RS00'+str(choice),RecommendationScore=expected_score(identity,number,choice),RecommendationResult=expected_result(expected_score(identity,number,choice)),Sequence=len(self.entries)+1))
   assert len(flow.get_editor_property('RecommendationHistory'))==len(self.entries)
   expected_entries=[x for x in self.entries if x['CustomerID']==identity]
   for entry in expected_entries:

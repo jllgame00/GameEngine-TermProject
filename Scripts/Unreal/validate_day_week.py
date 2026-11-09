@@ -125,18 +125,51 @@ def run():
   if index==0:assert str(struct_value(customer.get_editor_property('CustomerProfile'),'CustomerID'))=='TUTORIAL' and str(manager.get_editor_property('ActiveSequenceID'))=='TUTORIAL_Training'
   if index==1:assert list(map(str,manager.get_editor_property('DialogueList')))==['C01_Quiet_%02d'%i for i in range(1,6)] and str(manager.get_editor_property('ActiveSequenceID'))=='A_Visit1'
   R.setdefault('dialogue_sequences',[]).append({'customer':expected[0],'visit':expected[1],'sequence':str(manager.get_editor_property('ActiveSequenceID')),'rows':list(map(str,manager.get_editor_property('DialogueList')))})
+  sequence_rows=list(map(str,manager.get_editor_property('DialogueList')))
+  if expected[0]=='A'and expected[1]in (2,3):
+   from customer_a_validation_support import expected_a_rows
+   def previous_result(num):
+    e=flow.call_method('GetRecommendationForVisit',args=('A',num));return str(e.get_editor_property('RecommendationResult'))if e else None
+   assert str(manager.get_editor_property('ActiveSequenceID'))=='A_Visit'+str(expected[1])
+   assert sequence_rows==expected_a_rows(expected[1],previous_result(1),previous_result(2)if expected[1]==3 else None)
+  elif expected[0]=='B':
+   from customer_b_validation_support import expected_b_rows
+   def previous_b_result(num):
+    e=flow.call_method('GetRecommendationForVisit',args=('B',num));return str(e.get_editor_property('RecommendationResult'))if e else None
+   assert str(manager.get_editor_property('ActiveSequenceID'))=='B_V'+str(expected[1])
+   assert sequence_rows==expected_b_rows(expected[1],previous_b_result(1)if expected[1]>1 else None,previous_b_result(2)if expected[1]==3 else None)
+  else:assert len(sequence_rows)==5
+  active_profile=customer.get_editor_property('CustomerProfile')
+  profile_tags=[str(struct_value(active_profile,k))for k in ('Mood','MusicPreference','Personality')]
+  assert profile_tags==(['Restless'if expected[1]==1 else 'Quiet','Electronic','Adventurous']if expected[0]=='B'else ['Quiet','Jazz','Traditional'])
   lines=0;seen=[]
   while widgets(DU):
-   lines+=1;assert lines<=5
+   lines+=1;assert lines<=len(sequence_rows)
    seen.append(str(widgets(DU)[0].get_editor_property('DialogueText').get_text()))
+   if expected[0]=='A'and expected[1]in (2,3):
+    capture=OUT.with_name(OUT.stem+'-A'+str(expected[1])+'-line'+str(lines)+'.png')
+    unreal.SystemLibrary.execute_console_command(world,'Shot showui filename="'+str(capture)+'" -nosuffix')
+    R.setdefault('a_revisit_ui_captures',[]).append(str(capture));yield from frames(4)
+   if expected[0]=='B':
+    capture=OUT.with_name(OUT.stem+'-B'+str(expected[1])+'-line'+str(lines)+'.png')
+    unreal.SystemLibrary.execute_console_command(world,'Shot showui filename="'+str(capture)+'" -nosuffix')
+    R.setdefault('b_ui_captures',[]).append(str(capture));yield from frames(4)
    yield from click(widgets(DU)[0],'Next')
-  assert lines==5
+  assert lines==len(sequence_rows)
+  if expected[0]=='A'and expected[1]in (2,3):
+   authored=json.loads((Path(unreal.Paths.project_dir())/'Scripts/Unreal/customer_a_dialogue.json').read_text(encoding='utf-8-sig'))['rows']
+   assert seen==[authored[row]for row in sequence_rows]
+  if expected[0]=='B':
+   authored=json.loads((Path(unreal.Paths.project_dir())/'Scripts/Unreal/customer_b_dialogue.json').read_text(encoding='utf-8-sig'))['rows']
+   assert seen==[authored[row]for row in sequence_rows]
   if index==1:assert digest(seen)==REFERENCE['a1_display_lines_sha256']
   assert not manager.get_editor_property('DialogueList') and manager.get_editor_property('ActiveDialogueSource') is None and manager.get_editor_property('PendingDialogueSource') is None
   assert pc.get_view_target()==pawn and not pc.get_editor_property('show_mouse_cursor')
   yield from interact(shelf,SU)
-  choice=(2 if index==1 else index%3+1) if HISTORY_TEST else index%3+1;yield from click(widgets(SU)[0],'BTN_LP0'+str(choice))
-  assert flow.get_editor_property('RawRecommendationScore')=={1:3,2:2,3:0}[choice]
+  choice=3 if expected[0]=='B'else (2 if index==1 else index%3+1)if HISTORY_TEST else index%3+1;yield from click(widgets(SU)[0],'BTN_LP0'+str(choice))
+  from customer_b_validation_support import expected_score
+  score=expected_score(expected[0],expected[1],choice)
+  assert flow.get_editor_property('RawRecommendationScore')==score
   assert 'RS00'+str(choice) in tt.get_editor_property('CurrentRecord').export_text()
   if HISTORY_TEST:memory.selected(flow)
   yield from interact(tt,TU);panel=widgets(TU)[0]
@@ -150,6 +183,13 @@ def run():
   assert tt.get_editor_property('PlaybackAudio') is None
   if HISTORY_TEST:memory.result(flow,expected,index,choice)
   result=widgets(RU)[0];assert result.get_editor_property('Continue').has_keyboard_focus()
+  if expected[0]=='B':
+   from customer_b_validation_support import expected_result
+   neutral=json.loads((Path(unreal.Paths.project_dir())/'Scripts/Unreal/preference_result_feedback.json').read_text(encoding='utf-8-sig'))
+   feedback=str(result.get_editor_property('ScoreStatus').get_text());assert feedback==neutral[expected_result(score)]
+   R.setdefault('b_result_feedback',[]).append({'visit':expected[1],'score':score,'text':feedback})
+   capture=OUT.with_name(OUT.stem+'-B'+str(expected[1])+'-result.png')
+   unreal.SystemLibrary.execute_console_command(world,'Shot showui filename="'+str(capture)+'" -nosuffix');R.setdefault('b_ui_captures',[]).append(str(capture));yield from frames(4)
   # Virtual Slate user activation; production owning-user focus is asserted above.
   yield from click(result,'Continue')
   store=flow.get_editor_property('StoreBGMRef');assert store and store.is_playing()
@@ -159,7 +199,7 @@ def run():
   assert pc.get_view_target()==pawn and not pc.get_editor_property('show_mouse_cursor')
   assert not any(widgets(p) for p in (DU,SU,TU,RU))
   for _ in range(3):flow.call_method('HandleCustomerExited')
-  R['cycles'].append({'id':expected[0],'visit':expected[1],'day':expected[2],'listening_to_result_seconds':elapsed,'choice':choice,'score':{1:3,2:2,3:0}[choice],'store_bgm_played':True,'recovered':True});R['events']=observed();save()
+  R['cycles'].append({'id':expected[0],'visit':expected[1],'day':expected[2],'listening_to_result_seconds':elapsed,'choice':choice,'score':score,'store_bgm_played':True,'recovered':True});R['events']=observed();save()
  yield from wait(lambda:flow.get_editor_property('FinalStoryEventTriggered'),8)
  events=observed();assert events['StartedDays']==events['EndedDays']==list(range(1,8)),events
  assert list(zip(events['FinishedIDs'],events['FinishedVisits']))==[(x[0],x[1]) for x in EXPECTED],events

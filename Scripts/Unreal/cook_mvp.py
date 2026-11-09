@@ -19,7 +19,7 @@ maps=[str(x.relative_to(output)) for x in output.rglob('L_RecordShop_Greybox.uma
 results=[str(x.relative_to(output)) for x in output.rglob('WBP_Result_IntegrationFallback.uasset')]
 prologues=[str(x.relative_to(output)) for x in output.rglob('WBP_Prologue.uasset')]
 histories=[str(x.relative_to(output)) for x in output.rglob('BP_RecommendationHistoryEntry.uasset')]
-foundation={name:[str(x.relative_to(output)) for x in output.rglob(name+'.uasset')] for name in ('DT_RecordCatalogue','DA_RecordCatalogue','DA_A1_Narrative','DA_TutorialNarrative','DT_TutorialDialogue')}
+foundation={name:[str(x.relative_to(output)) for x in output.rglob(name+'.uasset')] for name in ('DT_RecordCatalogue','DA_RecordCatalogue','DA_A1_Narrative','DA_TutorialNarrative','DT_TutorialDialogue','DT_A_RevisitDialogue','DA_A2_Narrative','DA_A3_Narrative','DT_B_Dialogue','DA_B1_Narrative','DA_B2_Narrative','DA_B3_Narrative')}
 weeks=[str(x.relative_to(output)) for x in output.rglob('DA_TemporaryWeek.uasset')]
 days=[str(x.relative_to(output)) for x in output.rglob('DA_Day*.uasset') if x.parent.name=='Schedule']
 visits=[str(x.relative_to(output)) for x in output.rglob('DA_Visit_*.uasset') if x.parent.name=='Schedule']

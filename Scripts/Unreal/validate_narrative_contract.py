@@ -25,7 +25,11 @@ try:
  week=unreal.load_asset('/Game/RecordShop/Data/Schedule/DA_TemporaryWeek')
  for day in week.get_editor_property('Days'):
   for v in day.get_editor_property('Visits'):
-   if v!=visit:assert v.get_editor_property('Narrative') is None, v.get_name()
+   if str(v.get_editor_property('CustomerID'))=='A' and v.get_editor_property('VisitNumber')in (2,3):
+    assert v.get_editor_property('Narrative')==unreal.load_asset('/Game/RecordShop/Data/Narrative/DA_A'+str(v.get_editor_property('VisitNumber'))+'_Narrative')
+   elif str(v.get_editor_property('CustomerID'))=='B':
+    assert v.get_editor_property('Narrative')==unreal.load_asset('/Game/RecordShop/Data/Narrative/DA_B'+str(v.get_editor_property('VisitNumber'))+'_Narrative')
+   elif v!=visit:assert v.get_editor_property('Narrative') is None, v.get_name()
  R['pass']=True
 except Exception:R['fatal']=traceback.format_exc()
 R['complete']=True
