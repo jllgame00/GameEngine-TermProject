@@ -36,7 +36,7 @@ try:
    R['visits'].append({'id':identity,'visit':number,'day':DAYS[identity][number-1],'sequence':str(asset.get_editor_property('SequenceID')),'profile':list(PROFILES[identity]),'appearance':'PLACEHOLDER'})
  for day in week.get_editor_property('Days'):
   for v in day.get_editor_property('Visits'):
-   if str(v.get_editor_property('CustomerID'))not in ('A','B','C','D'):assert v.get_editor_property('Narrative')is None
+   if str(v.get_editor_property('CustomerID'))not in ('A','B','C','D','E','F','G','H'):assert v.get_editor_property('Narrative')is None
  cat=unreal.load_asset('/Game/RecordShop/Data/Records/DA_RecordCatalogue')
  assert list(map(str,unreal.DataTableFunctionLibrary.get_data_table_row_names(cat.get_editor_property('Table'))))==['RS001','RS002','RS003']
  for identity in ('RS004','RS005','RS006'):assert not cat.call_method('ResolveRecord',args=(identity,))[0]

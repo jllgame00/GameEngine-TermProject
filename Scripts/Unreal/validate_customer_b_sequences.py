@@ -105,9 +105,9 @@ def run():
    assert str(panel.get_editor_property('ScoreStatus').get_text())==NEUTRAL_FEEDBACK[expected_result(synthetic_score)]
   assert dm.call_method('CalculateLPScore',args=('Quiet','Electronic','Adventurous'))==(2 if number==1 else 3)
   assert not flow.get_editor_property('RecordCatalogue').call_method('ResolveRecord',args=('RS004',))[0]
- # Restore base runtime profile to model the next fresh A/E actor: no B override leaks.
- for identity in ('A','E'):
-  visit=unreal.load_asset('/Game/RecordShop/Data/Schedule/DA_Visit_'+identity+'_1')
+ # Restore base runtime profile to model fresh A/legacy actors: no B override leaks.
+ for identity in ('A','TEMP_D7_01'):
+  visit=unreal.load_asset('/Game/RecordShop/Data/Schedule/DA_Visit_'+identity+'_1');assert visit,identity
   observer.call_method('SetFixture',args=(flow,visit,[],profile));flow.call_method('ApplyVisitContext');flow.call_method('PrepareRevisitMemory')
   current=flow.get_editor_property('ActiveCustomer').get_editor_property('CustomerProfile')
   assert [str(struct_value(current,k))for k in ('CustomerID','Mood','MusicPreference','Personality')]==[identity,'Quiet','Jazz','Traditional']

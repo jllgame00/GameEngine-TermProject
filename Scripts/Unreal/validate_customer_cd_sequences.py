@@ -109,14 +109,14 @@ def run():
    for future in ('RS004','RS005','RS006'):assert not flow.get_editor_property('RecordCatalogue').call_method('ResolveRecord',args=(future,))[0]
    assert not flow.get_editor_property('RecommendationHistory'),'Selection recorded History'
  # Simulate the fresh base-profile instance created by the production spawn authority.
- for identity in ('A','B','E'):
-  visit=unreal.load_asset('/Game/RecordShop/Data/Schedule/DA_Visit_'+identity+'_1')
+ for identity in ('A','B','TEMP_D7_01'):
+  visit=unreal.load_asset('/Game/RecordShop/Data/Schedule/DA_Visit_'+identity+'_1');assert visit,identity
   dm.call_method('CancelDialogueSequence');observer.call_method('SetFixture',args=(flow,visit,entries,profile));flow.call_method('ApplyVisitContext');flow.call_method('PrepareRevisitMemory')
   current=flow.get_editor_property('ActiveCustomer').get_editor_property('CustomerProfile')
   tags=['Restless','Electronic','Adventurous']if identity=='B'else ['Quiet','Jazz','Traditional']
   assert [str(struct_value(current,k))for k in ('CustomerID','Mood','MusicPreference','Personality')]==[identity,*tags]
   assert not flow.call_method('GetActiveVisitMemory')[3]and not flow.get_editor_property('NarrativeMemoryVisits')
-  dm.call_method('StartDialogue');assert str(dm.get_editor_property('ActiveSequenceID'))=={'A':'A_Visit1','B':'B_V1','E':'LEGACY_MOOD'}[identity]
+  dm.call_method('StartDialogue');assert str(dm.get_editor_property('ActiveSequenceID'))=={'A':'A_Visit1','B':'B_V1','TEMP_D7_01':'LEGACY_MOOD'}[identity]
   assert list(map(str,dm.get_editor_property('DialogueList')))==(['B1_Current_%02d'%i for i in range(1,7)]if identity=='B'else ['C01_Quiet_%02d'%i for i in range(1,6)])
   dm.call_method('CancelDialogueSequence')
   if identity!='B':
