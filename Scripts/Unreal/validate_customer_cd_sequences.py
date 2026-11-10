@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT=Path(unreal.Paths.project_dir());sys.path.insert(0,str(ROOT/'Scripts/Unreal'))
 from narrative_graph_helpers import *
 from narrative_validation_support import assert_reference_integrity,struct_value
+from record_expansion_support import candidates
 from customer_b_validation_support import expected_score,expected_result
 from customer_cd_validation_support import PROFILES,DAYS,SCORES,expected_cd_rows
 FEEDBACK_REFERENCE=json.loads((ROOT/'Scripts/Unreal/result_feedback_reference.json').read_text(encoding='utf-8'))['legacy_feedback']
@@ -74,7 +75,7 @@ def run():
    if context[3]:assert str(context[4].get_editor_property('CustomerID'))==identity and context[4].get_editor_property('VisitNumber')==1
    expected=expected_cd_rows(identity,number,previous)
    assert list(map(str,dm.get_editor_property('PendingDialogueRows')))==expected,(identity,number,result,mode)
-   assert list(map(str,flow.call_method('GetActiveCandidateRecordIDs')))==['RS001','RS002','RS003']
+   assert list(map(str,flow.call_method('GetActiveCandidateRecordIDs')))==candidates(identity,number)
    runtime=flow.get_editor_property('ActiveCustomer').get_editor_property('CustomerProfile')
    assert [str(struct_value(runtime,k))for k in ('CustomerID','Mood','MusicPreference','Personality')]==[identity,*PROFILES[identity]]
    assert dm.get_editor_property('CurrentCustomer').export_text()==runtime.export_text()and dm.get_editor_property('CurrentMood')=='Quiet'
@@ -106,7 +107,7 @@ def run():
     panel.call_method('SetRawScoreDisplay',args=(True,score));assert str(panel.get_editor_property('ScoreStatus').get_text())==NEUTRAL_FEEDBACK[expected_result(score)]
    panel.call_method('SetRawScoreDisplay',args=(False,3));assert str(panel.get_editor_property('ScoreStatus').get_text())==FEEDBACK_REFERENCE['UNAVAILABLE']
    assert dm.call_method('CalculateLPScore',args=PROFILES[identity])==3
-   for future in ('RS004','RS005','RS006'):assert not flow.get_editor_property('RecordCatalogue').call_method('ResolveRecord',args=(future,))[0]
+   for rid in ('RS004','RS005','RS006'):assert flow.get_editor_property('RecordCatalogue').call_method('ResolvePlayableRecord',args=(rid,))[0]
    assert not flow.get_editor_property('RecommendationHistory'),'Selection recorded History'
  # Simulate the fresh base-profile instance created by the production spawn authority.
  for identity in ('A','B','TEMP_D7_01'):

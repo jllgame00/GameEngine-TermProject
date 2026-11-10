@@ -8,6 +8,7 @@ import unreal
 ROOT=Path(unreal.Paths.project_dir());sys.path.insert(0,str(ROOT/'Scripts/Unreal'))
 from day_graph_helpers import *
 from narrative_validation_support import digest,struct_value
+from record_expansion_support import candidates,DATA
 REFERENCE=json.loads((ROOT/'Scripts/Unreal/narrative_reference_baseline.json').read_text(encoding='utf8'))
 HISTORY_TEST=os.environ.get('MVP_HISTORY_VALIDATION')=='1'
 if HISTORY_TEST:
@@ -62,6 +63,15 @@ observer_fields=[('StartedDays','int'),('EndedDays','int'),('FinishedIDs','name'
 if HISTORY_TEST:observer_fields += [('MemoryIDs','name'),('MemoryVisits','int'),('MemoryPrevious','bool')]
 for name,kind in observer_fields:assert L.add_member_variable(probe,name,L.get_array_type(L.get_basic_type_by_name(kind)))
 assert L.compile_blueprint(probe)
+# Unsaved observer distinguishes natural EOF loops from accidental restarts.
+assert L.add_member_variable(probe,'NaturalBGMFinishes',L.get_basic_type_by_name('int'))
+assert L.compile_blueprint(probe)
+ambient_event=signature_event(probe,'ObserveAmbientFinish',[]);g=evgraph(probe)
+assign(g,ambient_event.find_then_pin(),'NaturalBGMFinishes',calc(g,'Add_IntInt',A=get(g,'NaturalBGMFinishes'),B=1))
+ambient_bind=signature_event(probe,'BindAmbientFinish',[('Audio',L.get_object_reference_type(unreal.AudioComponent))]);g=evgraph(probe)
+node=action(g,'Bind Event to On Audio Finished',[pin(ambient_bind,'Audio',True)],unreal.AudioComponent)
+link(pin(ambient_bind,'Audio',True),pin(node,'self'));link(pin(ambient_event,'OutputDelegate',True),pin(node,'Delegate'));link(ambient_bind.find_then_pin(),node.find_execute_pin())
+ambient_bind_name=str(ambient_bind.get_node_title())
 events=[]
 event_specs=[
  ('OnDayStarted',[('Day',L.get_basic_type_by_name('int'))],[('StartedDays','Day')]),
@@ -97,12 +107,28 @@ def run():
  def advance(panel):yield from click(panel,'Continue')
  R['opening']=yield from exercise_opening(world,flow,pc,pawn,advance);save()
  tt=flow.get_editor_property('TurntableRef');shelf=unreal.GameplayStatics.get_all_actors_of_class(world,cls(SHELF))[0]
- home=pawn.get_actor_transform();home_control=pc.get_control_rotation()
+ home=pawn.get_actor_transform();home_control=pc.get_control_rotation();previous_day=0;previous_bgm_id=None
  for index in range(17):
   yield from wait(lambda:len(widgets(DU))==1,35)
   customer=flow.get_editor_property('ActiveCustomer');assert customer
   assert len(unreal.GameplayStatics.get_all_actors_of_class(world,cls(CUSTOMER)))==1,'Duplicate customer'
   current_day=flow.get_editor_property('CurrentDay');visit=flow.get_editor_property('ActiveVisit')
+  if current_day!=previous_day or index==0:
+   assert flow.get_editor_property('StoreBGMRef')is None and not flow.get_editor_property('StoreBGMRequested')
+   assert str(flow.get_editor_property('CurrentStoreBGMRecordID'))=='None'
+   if current_day>0:
+    assert not tt.get_editor_property('HasRecord')and str(struct_value(tt.get_editor_property('CurrentRecord'),'RecordID'))=='None'
+   R.setdefault('day_audio_reset',[]).append(current_day)
+  elif previous_bgm_id:
+   ambient=flow.get_editor_property('StoreBGMRef');assert ambient and ambient.is_playing()
+   assert str(flow.get_editor_property('CurrentStoreBGMRecordID'))==previous_bgm_id
+   ok,prior=flow.get_editor_property('RecordCatalogue').call_method('ResolvePlayableRecord',args=(previous_bgm_id,));assert ok and ambient.get_editor_property('sound')==struct_value(prior,'Audio')
+   R.setdefault('dialogue_bgm',[]).append({'customer_index':index,'record':previous_bgm_id,'component':ambient.get_path_name()})
+  dialogue_bgm=flow.get_editor_property('StoreBGMRef')
+  dialogue_bgm_path=dialogue_bgm.get_path_name()if dialogue_bgm else None
+  dialogue_finish_count=observer.get_editor_property('NaturalBGMFinishes')
+  if dialogue_bgm:observer.call_method(ambient_bind_name,args=(dialogue_bgm,))
+  dialogue_bgm=None
   if index==0:
    assert current_day==0 and visit is None and not flow.get_editor_property('TutorialComplete')
    expected=('TUTORIAL',0,0,0)
@@ -196,25 +222,62 @@ def run():
   assert pc.get_view_target()==pawn and not pc.get_editor_property('show_mouse_cursor')
   yield from interact(shelf,SU)
   choice=(2 if index==1 else index%3+1)if HISTORY_TEST else index%3+1
-  if expected[0]=='B':choice=3
-  elif expected[0]=='C':choice=2
-  elif expected[0]=='D':choice=1 if expected[1]==1 else 3
-  elif expected[0]in SINGLE_PROFILES:choice={'E':2,'F':3,'G':2,'H':1}[expected[0]]
-  yield from click(widgets(SU)[0],'BTN_LP0'+str(choice))
+  if expected[0]=='B':choice=3 if expected[1]==1 else 4
+  elif expected[0]in ('C','G'):choice=5
+  elif expected[0]in ('D','H'):choice=6
+  elif expected[0]in SINGLE_PROFILES:choice={'E':2,'F':3}[expected[0]]
+  ids=candidates(expected[0],expected[1]);selection=widgets(SU)[0]
+  assert list(map(str,flow.call_method('GetActiveCandidateRecordIDs')))==ids
+  assert list(map(str,selection.get_editor_property('ResolvedCandidateIDs')))==ids
+  card_evidence=[]
+  for slot,identity in enumerate(ids,1):
+   card=selection.get_editor_property('CardRecord'+str(slot));button=selection.get_editor_property('BTN_LP0'+str(slot))
+   assert str(struct_value(card,'RecordID'))==identity and button.get_is_enabled()
+   cover=struct_value(card,'Cover');image=button.get_content().get_child_at(0)
+   assert image.get_editor_property('brush').get_editor_property('resource_object')==cover
+   assert image.is_visible()if cover else image.get_visibility()==unreal.SlateVisibility.COLLAPSED
+   card_evidence.append({'slot':slot,'record':identity,'cover':cover.get_path_name()if cover else None})
+  capture=OUT.with_name(OUT.stem+'-'+expected[0]+str(expected[1])+'-candidates.png')
+  unreal.SystemLibrary.execute_console_command(world,'Shot showui filename="'+str(capture)+'" -nosuffix');yield from frames(4)
+  R.setdefault('candidate_ui',[]).append({'customer':expected[0],'visit':expected[1],'cards':card_evidence,'capture':str(capture)})
+  if dialogue_bgm_path:
+   ambient=flow.get_editor_property('StoreBGMRef');assert ambient and ambient.is_playing()
+   assert str(flow.get_editor_property('CurrentStoreBGMRecordID'))==previous_bgm_id
+   ok,prior=flow.get_editor_property('RecordCatalogue').call_method('ResolvePlayableRecord',args=(previous_bgm_id,));assert ok and ambient.get_editor_property('sound')==struct_value(prior,'Audio')
+   finishes=observer.get_editor_property('NaturalBGMFinishes')-dialogue_finish_count
+   if ambient.get_path_name()!=dialogue_bgm_path:
+    assert finishes>0,'Dialogue restarted BGM without natural audio completion'
+    R.setdefault('natural_dialogue_loops',[]).append({'customer_index':index,'record':previous_bgm_id,'before':dialogue_bgm_path,'after':ambient.get_path_name(),'natural_finishes':finishes})
+   else:assert finishes==0
+   assert len([a for a in unreal.ObjectIterator(unreal.AudioComponent)if a.is_playing()and a.get_world()==world])==1
+  selected_id='RS00'+str(choice);slot=ids.index(selected_id)+1
+  selected_record=selection.get_editor_property('CardRecord'+str(slot));selected_audio=struct_value(selected_record,'Audio');assert selected_audio
+  old_bgm=flow.get_editor_property('StoreBGMRef');old_bgm_path=old_bgm.get_path_name()if old_bgm else None
+  old_bgm=None
+  yield from click(selection,'BTN_LP0'+str(slot))
+  assert not flow.get_editor_property('StoreBGMRequested')
   from customer_b_validation_support import expected_score
   score=expected_score(expected[0],expected[1],choice)
   assert flow.get_editor_property('RawRecommendationScore')==score
-  assert 'RS00'+str(choice) in tt.get_editor_property('CurrentRecord').export_text()
+  assert str(struct_value(tt.get_editor_property('CurrentRecord'),'RecordID'))==selected_id
+  assert struct_value(tt.get_editor_property('CurrentRecord'),'Audio')==selected_audio
   if HISTORY_TEST:memory.selected(flow)
   yield from interact(tt,TU);panel=widgets(TU)[0]
   for button in ('BTN_OpenLid','BTN_PlaceRecord','BTN_SelectRPM','BTN_RPM33','BTN_MoveTonearm','BTN_Play'):
    yield from wait(lambda:panel.get_editor_property(button).get_is_enabled(),8)
    yield from click(panel,button)
   audio=tt.get_editor_property('PlaybackAudio');assert audio and audio.is_playing()
+  assert flow.get_editor_property('StoreBGMRef')is None
+  assert old_bgm_path not in [a.get_path_name()for a in unreal.ObjectIterator(unreal.AudioComponent)if a.is_playing()and a.get_world()==world],'Previous BGM overlaps Listening'
+  assert audio.get_editor_property('sound')==selected_audio,(selected_id,audio.get_editor_property('sound'),selected_audio)
   listen_start=unreal.GameplayStatics.get_time_seconds(world)
   yield from wait(lambda:len(widgets(RU))==1,16)
   elapsed=unreal.GameplayStatics.get_time_seconds(world)-listen_start;assert 9.5<=elapsed<=14,elapsed
   assert tt.get_editor_property('PlaybackAudio') is None
+  result_bgm=flow.get_editor_property('StoreBGMRef');assert result_bgm and result_bgm.is_playing()
+  assert result_bgm.get_editor_property('sound')==selected_audio and str(flow.get_editor_property('CurrentStoreBGMRecordID'))==selected_id
+  result_bgm_path=result_bgm.get_path_name();result_finish_count=observer.get_editor_property('NaturalBGMFinishes')
+  observer.call_method(ambient_bind_name,args=(result_bgm,));result_bgm=None
   if HISTORY_TEST:memory.result(flow,expected,index,choice)
   result=widgets(RU)[0];assert result.get_editor_property('Continue').has_keyboard_focus()
   if expected[0]in ('B','C','D','E','F','G','H'):
@@ -227,13 +290,17 @@ def run():
   # Virtual Slate user activation; production owning-user focus is asserted above.
   yield from click(result,'Continue')
   store=flow.get_editor_property('StoreBGMRef');assert store and store.is_playing()
+  if store.get_path_name()!=result_bgm_path:assert observer.get_editor_property('NaturalBGMFinishes')>result_finish_count,'Continue restarted BGM without natural completion'
+  assert store.get_editor_property('sound')==selected_audio
+  previous_day=current_day;previous_bgm_id=selected_id
   # Restore fixture-only approach location so the player cannot block the exit route.
   pawn.set_actor_transform(home,False,True);pc.set_control_rotation(home_control)
   yield from wait(lambda:flow.get_editor_property('ActiveCustomer') is None,15)
   assert pc.get_view_target()==pawn and not pc.get_editor_property('show_mouse_cursor')
   assert not any(widgets(p) for p in (DU,SU,TU,RU))
   for _ in range(3):flow.call_method('HandleCustomerExited')
-  R['cycles'].append({'id':expected[0],'visit':expected[1],'day':expected[2],'listening_to_result_seconds':elapsed,'choice':choice,'score':score,'store_bgm_played':True,'recovered':True});R['events']=observed();save()
+  R['cycles'].append({'id':expected[0],'visit':expected[1],'day':expected[2],'listening_to_result_seconds':elapsed,'choice':choice,'slot':slot,'candidates':ids,'audio':selected_audio.get_path_name(),'score':score,'store_bgm_played':True,'store_bgm_id':selected_id,'store_bgm_component':result_bgm_path,'no_overlap':True,'continue_no_restart':True,'recovered':True});R['events']=observed();save()
+ assert set(DATA['records']).issubset({'RS00'+str(c['choice'])for c in R['cycles']})
  yield from wait(lambda:flow.get_editor_property('FinalStoryEventTriggered'),8)
  events=observed();assert events['StartedDays']==events['EndedDays']==list(range(1,8)),events
  assert list(zip(events['FinishedIDs'],events['FinishedVisits']))==[(x[0],x[1]) for x in EXPECTED],events

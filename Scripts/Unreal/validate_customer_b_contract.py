@@ -4,12 +4,13 @@ from pathlib import Path
 import unreal
 ROOT=Path(unreal.Paths.project_dir());sys.path.insert(0,str(ROOT/'Scripts/Unreal'))
 from narrative_validation_support import assert_reference_integrity,text_literal
+from record_expansion_support import RECORD_IDS,candidates,assert_protected_assets
 from narrative_graph_helpers import L,G
 R={'complete':False,'pass':False}
 try:
  R['legacy']=assert_reference_integrity()
  base=json.loads((ROOT/'Scripts/Unreal/customer_b_reference_baseline.json').read_text(encoding='utf-8'))
- for path,sha in base['asset_sha256'].items():assert hashlib.sha256((ROOT/path).read_bytes()).hexdigest()==sha,path
+ assert_protected_assets(base)
  flow=unreal.load_asset('/Game/RecordShop/Core/Flow/BP_GameFlowManager')
  R['graphs']={key:[str(n.get_node_title())for n in G.get_graph_editor_by_name(flow,key).list_all_nodes()]for key in ('ConfigureActiveNarrative','ApplyVisitProfileOverrides','EvaluateRecordScore','CommitRecommendationHistory')}
  week=unreal.load_asset('/Game/RecordShop/Data/Schedule/DA_TemporaryWeek')
@@ -31,14 +32,14 @@ try:
   assert list(asset.get_editor_property('MemoryVisitNumbers'))==list(range(1,num))
   assert bool(asset.get_editor_property('RequireAllMemories'))==(num==3)
   assert asset.get_editor_property('EarlierMemoryVisitNumber')==(1 if num==3 else 0)
-  assert list(map(str,asset.get_editor_property('CandidateRecordIDs')))==(['RS001','RS002','RS003']if num==1 else [])
+  assert list(map(str,asset.get_editor_property('CandidateRecordIDs')))==candidates('B',num)
   assert str(asset.get_editor_property('ReviewStatus'))=='READY'and asset.get_editor_property('SourceTable')==table
  for d in week.get_editor_property('Days'):
   for v in d.get_editor_property('Visits'):
    if str(v.get_editor_property('CustomerID'))not in ('A','B','C','D','E','F','G','H'):assert v.get_editor_property('Narrative')is None
  catalogue=unreal.load_asset('/Game/RecordShop/Data/Records/DA_RecordCatalogue')
- assert list(map(str,unreal.DataTableFunctionLibrary.get_data_table_row_names(catalogue.get_editor_property('Table'))))==['RS001','RS002','RS003']
- assert not catalogue.call_method('ResolveRecord',args=('RS004',))[0]
+ assert list(map(str,unreal.DataTableFunctionLibrary.get_data_table_row_names(catalogue.get_editor_property('Table'))))==RECORD_IDS
+ for identity in RECORD_IDS:assert catalogue.call_method('ResolvePlayableRecord',args=(identity,))[0]
  result_ui=unreal.load_asset('/Game/RecordShop/UI/Result/WBP_Result_IntegrationFallback')
  assert all(name in [g.get_name()for g in L.list_graphs(result_ui)]for name in ('UsesVisitProfileOverrides','PreferenceAwareFeedback'))
  R['new_rows']=26;R['protected_assets']=len(base['asset_sha256']);R['pass']=True

@@ -26,6 +26,7 @@ def assert_reference_integrity():
  catalogue=unreal.load_asset('/Game/RecordShop/Data/Records/DA_RecordCatalogue');assert catalogue
  exported=json.loads(unreal.DataTableFunctionLibrary.export_data_table_to_json_string(catalogue.get_editor_property('Table')))
  for row in exported:
+  if row['RecordID']not in baseline['record_ftext_identity_sha256']:continue
   assert digest({key:row[key] for key in ('Title','Artist')})==baseline['record_ftext_identity_sha256'][row['RecordID']],row['RecordID']
  found={}
  for record_id,sha in baseline['record_semantic_sha256'].items():

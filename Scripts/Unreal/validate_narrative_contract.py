@@ -4,6 +4,7 @@ from pathlib import Path
 import unreal,sys
 sys.path.insert(0,str(Path(unreal.Paths.project_dir())/"Scripts/Unreal"))
 from narrative_validation_support import assert_reference_integrity
+from record_expansion_support import RECORD_IDS,candidates
 R={'complete':False,'pass':False}
 try:
  dm=unreal.load_asset('/Game/DialogueManager')
@@ -11,9 +12,9 @@ try:
  for n in ('SetPendingDialogueSequence','ClearPendingDialogueSequence','CancelDialogueSequence'):assert n in names,'Missing sequence API: '+n
  catalogue=unreal.load_asset('/Game/RecordShop/Data/Records/DA_RecordCatalogue');assert catalogue
  assert catalogue.call_method('ResolveRecord',args=('RS001',))[0]
- for n in ('RS001','RS002','RS003'):
-  result=catalogue.call_method('ResolveRecord',args=(n,));assert result[0],n
- table=catalogue.get_editor_property('Table');assert list(map(str,unreal.DataTableFunctionLibrary.get_data_table_row_names(table)))==['RS001','RS002','RS003']
+ for n in RECORD_IDS:
+  result=catalogue.call_method('ResolvePlayableRecord',args=(n,));assert result[0],n
+ table=catalogue.get_editor_property('Table');assert list(map(str,unreal.DataTableFunctionLibrary.get_data_table_row_names(table)))==RECORD_IDS
  rows=json.loads(unreal.DataTableFunctionLibrary.export_data_table_to_json_string(unreal.load_asset('/Game/CustomerDialogue')))
  assert [r['Name'] for r in rows]==['C01_Quiet_%02d'%i for i in range(1,6)]
  assert unreal.load_asset('/Game/RecordShop/Data/Narrative/DA_A1_Narrative')
@@ -21,7 +22,7 @@ try:
  visit=unreal.load_asset('/Game/RecordShop/Data/Schedule/DA_Visit_A_1');definition=visit.get_editor_property('Narrative')
  assert definition.get_editor_property('SourceTable')==unreal.load_asset('/Game/CustomerDialogue')
  assert list(map(str,definition.get_editor_property('OrderedRows')))==['C01_Quiet_%02d'%i for i in range(1,6)]
- assert list(map(str,definition.get_editor_property('CandidateRecordIDs')))==['RS001','RS002','RS003']
+ assert list(map(str,definition.get_editor_property('CandidateRecordIDs')))==candidates('A',1)
  week=unreal.load_asset('/Game/RecordShop/Data/Schedule/DA_TemporaryWeek')
  for day in week.get_editor_property('Days'):
   for v in day.get_editor_property('Visits'):

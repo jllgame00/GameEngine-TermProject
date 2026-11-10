@@ -84,7 +84,8 @@ def run():
  flow.call_method('SetGameFlowState',args=(select_state,));flow.call_method('ResetRawScore');flow.call_method('HandleRecordSelected',args=(rs003,));assert flow.get_editor_property('RawRecommendationScore')==2
  assert unreal.get_default_object(unreal.load_class(None,'/Game/RecordShop/Characters/Customers/Customer01/Blueprints/BP_Customer01.BP_Customer01_C')).get_editor_property('CustomerProfile').export_text()==base_default
  R['visit_overrides_and_memory_before_start']=True
- production_table=cat.get_editor_property('Table');rows=json.loads(unreal.DataTableFunctionLibrary.export_data_table_to_json_string(production_table));assert len(rows)==3
+ production_table=cat.get_editor_property('Table');rows=json.loads(unreal.DataTableFunctionLibrary.export_data_table_to_json_string(production_table));assert len(rows)==6
+ rows=[row for row in rows if row['RecordID']in ('RS001','RS002','RS003')];assert len(rows)==3
  triples=[('Quiet','Electronic','Adventurous'),('Quiet','Folk','Sociable'),('Quiet','Classical','Reflective')]
  for i,tags in enumerate(triples,4):
   row=dict(rows[0]);row.update(Name='RS00'+str(i),RecordID='RS00'+str(i),Title='fixture',Artist='fixture',Mood=tags[0],Genre=tags[1],Theme=tags[2],Audio='None',Cover='None');rows.append(row)
@@ -111,7 +112,7 @@ def run():
   widget=unreal.get_default_object(unreal.load_class(None,'/Script/UMG.WidgetBlueprintLibrary')).call_method('Create',args=(world,unreal.load_class(None,UC),pc));assert not returned_flag(widget.call_method('ConfigureRecordCandidates',args=(fixture_cat,invalid)))
   assert not widget.get_editor_property('ResolvedCandidateIDs') and all(not widget.get_editor_property('BTN_LP0'+str(i)).get_is_enabled() for i in range(1,4))
   observer.call_method(str(widgetbind.get_node_title()),args=(widget,));before=observer.get_editor_property('SelectionEvents');widget.get_editor_property('BTN_LP01').get_editor_property('on_clicked').broadcast();assert observer.get_editor_property('SelectionEvents')==before
- assert len(unreal.DataTableFunctionLibrary.get_data_table_row_names(production_table))==3
+ assert len(unreal.DataTableFunctionLibrary.get_data_table_row_names(production_table))==6
  R['six_row_schema_three_candidate_ui_and_invalid_ids']=True
  R['reference_integrity_final']=assert_reference_integrity();R.update(complete=True,**{'pass':True});save()
 def tick(delta):

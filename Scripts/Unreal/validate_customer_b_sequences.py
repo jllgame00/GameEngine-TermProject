@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT=Path(unreal.Paths.project_dir());sys.path.insert(0,str(ROOT/'Scripts/Unreal'))
 from narrative_graph_helpers import *
 from narrative_validation_support import assert_reference_integrity,struct_value
+from record_expansion_support import candidates
 from customer_b_validation_support import expected_b_rows,expected_score,expected_result
 FEEDBACK_REFERENCE=json.loads((ROOT/'Scripts/Unreal/result_feedback_reference.json').read_text(encoding='utf-8'))['legacy_feedback']
 NEUTRAL_FEEDBACK=json.loads((ROOT/'Scripts/Unreal/preference_result_feedback.json').read_text(encoding='utf-8-sig'))
@@ -68,7 +69,7 @@ def run():
   context=flow.call_method('GetActiveVisitMemory');assert (str(context[0]),int(context[1]),int(context[2]))==('B',number,{1:2,2:4,3:6}[number])
   ef=first if mode=='normal'else None;expected=expected_b_rows(number,ef,second if mode=='normal'else None)
   assert list(map(str,dm.get_editor_property('PendingDialogueRows')))==expected,(number,first,second,mode,list(map(str,dm.get_editor_property('PendingDialogueRows'))),expected)
-  assert list(map(str,flow.call_method('GetActiveCandidateRecordIDs')))==['RS001','RS002','RS003']
+  assert list(map(str,flow.call_method('GetActiveCandidateRecordIDs')))==candidates('B',number)
   runtime=flow.get_editor_property('ActiveCustomer').get_editor_property('CustomerProfile')
   assert [str(struct_value(runtime,k))for k in ('CustomerID','Mood','MusicPreference','Personality')]==['B','Restless'if number==1 else 'Quiet','Electronic','Adventurous']
   before_finish=observer.get_editor_property('Finishes');dm.call_method('StartDialogue')
@@ -104,7 +105,7 @@ def run():
    panel.call_method('SetRawScoreDisplay',args=(True,synthetic_score))
    assert str(panel.get_editor_property('ScoreStatus').get_text())==NEUTRAL_FEEDBACK[expected_result(synthetic_score)]
   assert dm.call_method('CalculateLPScore',args=('Quiet','Electronic','Adventurous'))==(2 if number==1 else 3)
-  assert not flow.get_editor_property('RecordCatalogue').call_method('ResolveRecord',args=('RS004',))[0]
+  for rid in ('RS004','RS005','RS006'):assert flow.get_editor_property('RecordCatalogue').call_method('ResolvePlayableRecord',args=(rid,))[0]
  # Restore base runtime profile to model fresh A/legacy actors: no B override leaks.
  for identity in ('A','TEMP_D7_01'):
   visit=unreal.load_asset('/Game/RecordShop/Data/Schedule/DA_Visit_'+identity+'_1');assert visit,identity

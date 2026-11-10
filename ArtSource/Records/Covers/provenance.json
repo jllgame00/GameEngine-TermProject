@@ -1,0 +1,79 @@
+{
+  "author": "OpenAI Codex for RecordShop",
+  "origin": "Original code-authored vector artwork; no external images, fonts, references, or AI bitmap generation.",
+  "method": "Matplotlib vector primitives exported to editable SVG and 1024px PNG from the same deterministic scene; seeded paper stippling.",
+  "environment": {
+    "matplotlib": "3.10.3",
+    "numpy": "2.2.5",
+    "pillow": "11.2.1"
+  },
+  "checks": [
+    "two independent exports byte-identical",
+    "1024 x 1024",
+    "fully opaque",
+    "nontrivial image content",
+    "SVG contains no raster images or text"
+  ],
+  "records": [
+    {
+      "id": "RS004",
+      "title": "빛의 잔결",
+      "artist": "느린 회로",
+      "size": [
+        1024,
+        1024
+      ],
+      "opaque": true,
+      "files": {
+        "T_RS004_Cover.svg": {
+          "bytes": 473793,
+          "sha256": "a6ec22ae1f4fc89e093695fab1c4a8f0705e7a417f9476dfca0202511d1a84d3"
+        },
+        "T_RS004_Cover.png": {
+          "bytes": 220708,
+          "sha256": "b8b4152a8ead4ea6f7bea807ec5628c501c7fedfaf6587cb48d1d1db8cfab378"
+        }
+      }
+    },
+    {
+      "id": "RS005",
+      "title": "마주 놓은 의자",
+      "artist": "나무결 셋",
+      "size": [
+        1024,
+        1024
+      ],
+      "opaque": true,
+      "files": {
+        "T_RS005_Cover.svg": {
+          "bytes": 476507,
+          "sha256": "d329b3812a843347a4ac26459fa31fdad7a010dedee9c2f5529636f5951b8bfa"
+        },
+        "T_RS005_Cover.png": {
+          "bytes": 144300,
+          "sha256": "1c62a5c3f9c8593ec8b27acbb659c64093b40f3d2af4642a119e21d0e69a779a"
+        }
+      }
+    },
+    {
+      "id": "RS006",
+      "title": "남겨 둔 쉼표",
+      "artist": "작은 방 실내악",
+      "size": [
+        1024,
+        1024
+      ],
+      "opaque": true,
+      "files": {
+        "T_RS006_Cover.svg": {
+          "bytes": 468782,
+          "sha256": "f8ffedf46005a2cf2dc622786b2cf68600dcb86e0f0dd6bdce7abd415aa722f3"
+        },
+        "T_RS006_Cover.png": {
+          "bytes": 120071,
+          "sha256": "8ee753a1711bd7cd649f211f523352cb15c1b018f0fbeaa7062672e75b3305ed"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "records": {
+    "RS004": {"Title":"빛의 잔결","Artist":"느린 회로","Mood":"Quiet","Genre":"Electronic","Theme":"Adventurous","Energy":"Low","Audio":"RS004_QuietCircuit","Cover":"T_RS004_Cover","RecommendedRPM":33},
+    "RS005": {"Title":"마주 놓은 의자","Artist":"나무결 셋","Mood":"Quiet","Genre":"Folk","Theme":"Sociable","Energy":"Low","Audio":"RS005_SmallTable","Cover":"T_RS005_Cover","RecommendedRPM":33},
+    "RS006": {"Title":"남겨 둔 쉼표","Artist":"작은 방 실내악","Mood":"Quiet","Genre":"Classical","Theme":"Reflective","Energy":"Low","Audio":"RS006_OpenMeasure","Cover":"T_RS006_Cover","RecommendedRPM":33}
+  },
+  "candidates": {
+    "A_1":["RS001","RS002","RS003"], "A_2":["RS001","RS002","RS003"], "A_3":["RS001","RS002","RS003"],
+    "B_1":["RS003","RS004","RS001"], "B_2":["RS003","RS004","RS002"], "B_3":["RS003","RS004","RS002"],
+    "C_1":["RS005","RS002","RS003"], "C_2":["RS005","RS002","RS003"],
+    "D_1":["RS001","RS006","RS003"], "D_2":["RS001","RS006","RS003"],
+    "E_1":["RS001","RS002","RS003"], "F_1":["RS004","RS001","RS003"],
+    "G_1":["RS002","RS003","RS005"], "H_1":["RS006","RS002","RS003"]
+  }
+}

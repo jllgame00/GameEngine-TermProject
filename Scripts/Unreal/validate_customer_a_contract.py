@@ -4,6 +4,7 @@ from pathlib import Path
 import unreal
 ROOT=Path(unreal.Paths.project_dir());sys.path.insert(0,str(ROOT/'Scripts/Unreal'))
 from narrative_validation_support import assert_reference_integrity,text_literal
+from record_expansion_support import RECORD_IDS,candidates,assert_protected_assets
 from narrative_graph_helpers import L,G
 R={'complete':False,'pass':False}
 try:
@@ -23,7 +24,7 @@ try:
   assert a.get_editor_property('SourceTable')!=legacy
   assert str(a.get_editor_property('ReviewStatus'))=='READY'
  baseline=json.loads((ROOT/'Scripts/Unreal/customer_a_reference_baseline.json').read_text(encoding='utf-8'))
- for path,sha in baseline['asset_sha256'].items():assert hashlib.sha256((ROOT/path).read_bytes()).hexdigest()==sha,path
+ assert_protected_assets(baseline)
  authored=json.loads((ROOT/'Scripts/Unreal/customer_a_dialogue.json').read_text(encoding='utf-8-sig'))
  table=unreal.load_asset(authored['source']);exported=json.loads(unreal.DataTableFunctionLibrary.export_data_table_to_json_string(table))
  assert len(exported)==20 and {r['Name']:text_literal(r['Text'])for r in exported}==authored['rows']
@@ -33,7 +34,7 @@ try:
   assert list(definition.get_editor_property('MemoryVisitNumbers'))==list(range(1,num))
   assert bool(definition.get_editor_property('RequireAllMemories'))==(num==3)
   assert definition.get_editor_property('EarlierMemoryVisitNumber')==(1 if num==3 else 0)
-  assert not definition.get_editor_property('CandidateRecordIDs')
+  assert list(map(str,definition.get_editor_property('CandidateRecordIDs')))==candidates('A',num)
   assert all(str(definition.get_editor_property(k))=='None'for k in ('TargetMoodOverride','TargetGenreOverride','TargetThemeOverride'))
  R['new_rows']=len(exported);R['protected_packages']=len(baseline['asset_sha256']);R['pass']=True
 except Exception:R['fatal']=traceback.format_exc()

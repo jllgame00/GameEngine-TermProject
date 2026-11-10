@@ -51,11 +51,12 @@ try:
  import sys
  sys.path.insert(0,str(Path(unreal.Paths.project_dir())/'Scripts/Unreal'))
  from narrative_validation_support import assert_reference_integrity,canonical_record
+ from record_expansion_support import RECORD_IDS
  R['narrative_reference_integrity']=assert_reference_integrity()
  bp=unreal.load_asset('/Game/RecordShop/UI/RecordSelection/WBP_RecordSelect')
  assert not any(n.get_class().get_name()=='K2Node_MakeStruct' for n in unreal.BlueprintGraphEditor.get_graph_editor_by_name(bp,'EventGraph').list_all_nodes())
  catalogue=unreal.load_asset('/Game/RecordShop/Data/Records/DA_RecordCatalogue');table=catalogue.get_editor_property('Table')
- assert list(map(str,unreal.DataTableFunctionLibrary.get_data_table_row_names(table)))==['RS001','RS002','RS003']
+ assert list(map(str,unreal.DataTableFunctionLibrary.get_data_table_row_names(table)))==RECORD_IDS
  records=[]
  for identity in ('RS001','RS002','RS003'):
   ok,data=catalogue.call_method('ResolvePlayableRecord',args=(identity,));assert ok,identity

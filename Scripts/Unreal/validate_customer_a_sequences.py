@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT=Path(unreal.Paths.project_dir());sys.path.insert(0,str(ROOT/'Scripts/Unreal'))
 from narrative_graph_helpers import *
 from narrative_validation_support import assert_reference_integrity,struct_value
+from record_expansion_support import candidates
 from customer_a_validation_support import expected_a_rows
 FC='/Game/RecordShop/Core/Flow/BP_GameFlowManager.BP_GameFlowManager_C';MC='/Game/DialogueManager.DialogueManager_C'
 VC='/Game/RecordShop/Data/Schedule/BP_CustomerVisitDefinition.BP_CustomerVisitDefinition_C';EC='/Game/RecordShop/Data/History/BP_RecommendationHistoryEntry.BP_RecommendationHistoryEntry_C'
@@ -65,7 +66,7 @@ def run():
   flow.call_method('PrepareRevisitMemory')
   ef=first if mode=='normal'else None;expected=expected_a_rows(number,ef,second if mode=='normal'else None)
   assert list(map(str,dm.get_editor_property('PendingDialogueRows')))==expected,(number,first,second,mode,list(map(str,dm.get_editor_property('PendingDialogueRows'))),expected)
-  assert list(map(str,flow.call_method('GetActiveCandidateRecordIDs')))==['RS001','RS002','RS003']
+  assert list(map(str,flow.call_method('GetActiveCandidateRecordIDs')))==candidates('A',number)
   runtime=flow.get_editor_property('ActiveCustomer').get_editor_property('CustomerProfile')
   assert [str(struct_value(runtime,k))for k in ('CustomerID','Mood','MusicPreference','Personality')]==['A','Quiet','Jazz','Traditional']
   before_finish=observer.get_editor_property('Finishes');dm.call_method('StartDialogue')

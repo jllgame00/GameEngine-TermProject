@@ -634,6 +634,8 @@ def run():
  before=customer.get_actor_location();yield from continue_with_default_focus(result)
  assert not widgets(RU);assert flow.get_editor_property('ResultSubmitted');assert not pc.get_editor_property('show_mouse_cursor')
  store=flow.get_editor_property('StoreBGMRef');assert store and store.is_playing(), 'Result Continue did not restore Store BGM'
+ assert store.get_editor_property('sound')==struct_value(tt.get_editor_property('CurrentRecord'),'Audio')
+ assert str(flow.get_editor_property('CurrentStoreBGMRecordID'))==f'RS00{CHOICE}'
  R['store_bgm_after_result']=store.get_editor_property('sound').get_path_name();save()
  mark('Result Continue -> FinishResult -> customer exit route',before_exit=str(before))
  # The interaction fixture moved the player to the turntable. Restore only the

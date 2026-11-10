@@ -1,0 +1,206 @@
+{
+  "generator": "compose_expansion.py",
+  "generator_sha256": "c7f4dfee2cc05038062e4907a8d6e97ebe58fc5b1483192762e9c0c32d68da5e",
+  "provenance": "All notes, rhythms and timbres synthesized locally; no downloaded audio, samples, or song references.",
+  "synthesis_reference": "Existing compose_music.py envelope, additive synthesis, stereo room taps and FFmpeg loudnorm approach; never imported or modified.",
+  "versions": {
+    "numpy": "2.2.5",
+    "scipy": "1.15.3",
+    "ffmpeg": "ffmpeg version 8.1.1-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers"
+  },
+  "commands": [
+    "python ArtSource/Audio/Music/compose_expansion.py",
+    "python ArtSource/Audio/Music/test_compose_expansion.py"
+  ],
+  "listening_review": "MANUAL PENDING: verify musical character and timbre in headphones and in-game; signal checks cannot establish subjective quality.",
+  "reference_tracks": [
+    {
+      "file": "RS001_Best.wav",
+      "sha256": "3daf11260adf11dd0d272a665b14e754be82801bc5b3c8684cb9f21d1767a2ef",
+      "duration_seconds": 32.8789375,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -3.07633042099323,
+      "rms_dbfs": -20.045174810101773,
+      "integrated_lufs": -18.19,
+      "true_peak_dbtp": -3.04,
+      "loudness_range_lu": 2.4,
+      "clipped_samples": 0,
+      "first_frame": [
+        0,
+        0
+      ],
+      "last_frame": [
+        0,
+        0
+      ],
+      "first_10ms_peak_pcm": 0,
+      "last_10ms_peak_pcm": 0,
+      "max_silent_run_seconds": 0.9866458333333333,
+      "max_adjacent_sample_delta": 0.12762451171875
+    },
+    {
+      "file": "RS002_Good.wav",
+      "sha256": "0808c40559f00838c94e00b810510fc869c3097e3f8efcb01a734c6441382ff6",
+      "duration_seconds": 31.3,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -5.180898332511042,
+      "rms_dbfs": -20.04435973233125,
+      "integrated_lufs": -17.97,
+      "true_peak_dbtp": -5.18,
+      "loudness_range_lu": 2.3,
+      "clipped_samples": 0,
+      "first_frame": [
+        0,
+        0
+      ],
+      "last_frame": [
+        0,
+        0
+      ],
+      "first_10ms_peak_pcm": 0,
+      "last_10ms_peak_pcm": 0,
+      "max_silent_run_seconds": 0.8760208333333334,
+      "max_adjacent_sample_delta": 0.13018798828125
+    },
+    {
+      "file": "RS003_Poor.wav",
+      "sha256": "62e6a99004cb0be00546a234c5b2a1b523be7c12602d52af08203bbd4970e9f5",
+      "duration_seconds": 29.535291666666666,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -2.9853975394120704,
+      "rms_dbfs": -18.826282570748877,
+      "integrated_lufs": -17.97,
+      "true_peak_dbtp": -2.99,
+      "loudness_range_lu": 1.3,
+      "clipped_samples": 0,
+      "first_frame": [
+        0,
+        0
+      ],
+      "last_frame": [
+        0,
+        0
+      ],
+      "first_10ms_peak_pcm": 0,
+      "last_10ms_peak_pcm": 0,
+      "max_silent_run_seconds": 0.9708125,
+      "max_adjacent_sample_delta": 0.3232421875
+    }
+  ],
+  "tracks": [
+    {
+      "file": "RS004_QuietCircuit.wav",
+      "sha256": "9d2c2aa1f4fc3cde2ffec0b481d7df5a528fc4d9aa16bf85b126403595f0067b",
+      "duration_seconds": 28.666666666666668,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -5.070900462450333,
+      "rms_dbfs": -21.244550381896484,
+      "integrated_lufs": -19.0,
+      "true_peak_dbtp": -5.07,
+      "loudness_range_lu": 12.3,
+      "clipped_samples": 0,
+      "first_frame": [
+        0,
+        0
+      ],
+      "last_frame": [
+        0,
+        0
+      ],
+      "first_10ms_peak_pcm": 0,
+      "last_10ms_peak_pcm": 0,
+      "max_silent_run_seconds": 0.14141666666666666,
+      "max_adjacent_sample_delta": 0.026031494140625,
+      "record": "RS004",
+      "title": "빛의 잔결",
+      "artist": "느린 회로",
+      "bpm": 72,
+      "bars": 8,
+      "seed": 20261114,
+      "target_lufs": -19.0,
+      "original": true,
+      "recommended_rpm": 33,
+      "listening_review": "MANUAL PENDING"
+    },
+    {
+      "file": "RS005_SmallTable.wav",
+      "sha256": "a02a049826c182aeb716db9fbbe8ac8a7e5700244fb226fe40602af8ea6a1eef",
+      "duration_seconds": 29.272729166666668,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.108734709605298,
+      "rms_dbfs": -20.65618445772612,
+      "integrated_lufs": -18.5,
+      "true_peak_dbtp": -4.11,
+      "loudness_range_lu": 6.0,
+      "clipped_samples": 0,
+      "first_frame": [
+        0,
+        0
+      ],
+      "last_frame": [
+        0,
+        0
+      ],
+      "first_10ms_peak_pcm": 0,
+      "last_10ms_peak_pcm": 0,
+      "max_silent_run_seconds": 0.126625,
+      "max_adjacent_sample_delta": 0.0457763671875,
+      "record": "RS005",
+      "title": "마주 놓은 의자",
+      "artist": "나무결 셋",
+      "bpm": 88,
+      "bars": 10,
+      "seed": 20261115,
+      "target_lufs": -18.5,
+      "original": true,
+      "recommended_rpm": 33,
+      "listening_review": "MANUAL PENDING"
+    },
+    {
+      "file": "RS006_OpenMeasure.wav",
+      "sha256": "51bc3e07ce90795a8d17bd3052dec77d57a67697dd30a654ab32139df226bac1",
+      "duration_seconds": 31.0,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.062912207820235,
+      "rms_dbfs": -21.274785208596448,
+      "integrated_lufs": -19.25,
+      "true_peak_dbtp": -4.06,
+      "loudness_range_lu": 6.9,
+      "clipped_samples": 0,
+      "first_frame": [
+        0,
+        0
+      ],
+      "last_frame": [
+        0,
+        0
+      ],
+      "first_10ms_peak_pcm": 0,
+      "last_10ms_peak_pcm": 0,
+      "max_silent_run_seconds": 0.08316666666666667,
+      "max_adjacent_sample_delta": 0.037811279296875,
+      "record": "RS006",
+      "title": "남겨 둔 쉼표",
+      "artist": "작은 방 실내악",
+      "bpm": 60,
+      "bars": 7,
+      "seed": 20261116,
+      "target_lufs": -19.0,
+      "original": true,
+      "recommended_rpm": 33,
+      "listening_review": "MANUAL PENDING"
+    }
+  ]
+}
