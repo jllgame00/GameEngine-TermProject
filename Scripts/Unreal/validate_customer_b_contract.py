@@ -36,7 +36,7 @@ try:
   assert str(asset.get_editor_property('ReviewStatus'))=='READY'and asset.get_editor_property('SourceTable')==table
  for d in week.get_editor_property('Days'):
   for v in d.get_editor_property('Visits'):
-   if str(v.get_editor_property('CustomerID'))not in ('A','B','C','D','E','F','G','H'):assert v.get_editor_property('Narrative')is None
+   if str(v.get_editor_property('CustomerID'))not in ('A','B','C','D','E','F','G','H','I','J'):assert v.get_editor_property('Narrative')is None
  catalogue=unreal.load_asset('/Game/RecordShop/Data/Records/DA_RecordCatalogue')
  assert list(map(str,unreal.DataTableFunctionLibrary.get_data_table_row_names(catalogue.get_editor_property('Table'))))==RECORD_IDS
  for identity in RECORD_IDS:assert catalogue.call_method('ResolvePlayableRecord',args=(identity,))[0]

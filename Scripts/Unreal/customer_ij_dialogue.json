@@ -1,0 +1,40 @@
+{
+  "I": {
+    "source": "/Game/RecordShop/Data/Narrative/DT_I_Dialogue",
+    "speaker": "수영을 마친 손님",
+    "profile": ["Quiet", "Electronic", "Adventurous"],
+    "candidates": ["RS003", "RS001", "RS004"],
+    "scores": [1, 1, 2, 3, 1, 1],
+    "rows": {
+      "I1_Current_01": "수영하고 돌아가는 길이에요. 잠깐 앉아서 음반 하나 듣고 가려고요.",
+      "I1_Current_02": "지금은 박자가 밀어붙이지 않고, 소리 사이에 여유가 있었으면 해요.",
+      "I1_Current_03": "작게 번지는 신스나, 전자음의 질감이 조금씩 달라지는 곡이 궁금해요.",
+      "I1_Current_04": "늘 듣던 것과 다른 소리도 괜찮아요. 조용하지만 낯선 음반으로 골라 주실래요?"
+    },
+    "reactions": {
+      "ResultBestText": "조용한데 음색이 낯설어서, 제가 찾던 쪽이에요.",
+      "ResultGoodText": "흥미로운 소리네요. 생각했던 분위기와는 조금 달라요.",
+      "ResultPoorText": "오늘 듣고 싶던 전자음의 질감과는 조금 다르네요.",
+      "ExitText": "추천해 주셔서 고마워요. 이만 가볼게요."
+    }
+  },
+  "J": {
+    "source": "/Game/RecordShop/Data/Narrative/DT_J_Dialogue",
+    "speaker": "장을 본 손님",
+    "profile": ["Quiet", "Jazz", "Traditional"],
+    "candidates": ["RS002", "RS001", "RS003"],
+    "scores": [3, 2, 0, 1, 1, 1],
+    "rows": {
+      "J1_Current_01": "오늘은 장을 일찍 다 봤네요. 잠깐 음악을 듣고 가려고요.",
+      "J1_Current_02": "큰 소리나 급한 변화 없이, 편하게 따라갈 수 있는 곡이면 좋겠어요.",
+      "J1_Current_03": "피아노와 베이스가 있는 작은 재즈 합주를 좋아해요.",
+      "J1_Current_04": "새로운 곡이어도 선율과 진행은 익숙했으면 해요. 전통적인 재즈 연주 쪽으로 골라주시겠어요?"
+    },
+    "reactions": {
+      "ResultBestText": "익숙한 흐름을 편하게 따라들을 수 있네요.",
+      "ResultGoodText": "편하게 들었어요. 떠올렸던 재즈의 느낌과는 조금 다르네요.",
+      "ResultPoorText": "오늘은 조금 더 익숙한 재즈 연주를 듣고 싶었어요.",
+      "ExitText": "음반 골라주셔서 고마워요. 그럼 가볼게요."
+    }
+  }
+}

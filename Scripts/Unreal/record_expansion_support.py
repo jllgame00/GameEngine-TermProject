@@ -5,8 +5,8 @@ ROOT=Path(__file__).resolve().parents[2]
 DATA=json.loads((ROOT/'Scripts/Unreal/record_expansion.json').read_text(encoding='utf8'))
 RECORD_IDS=['RS00'+str(i)for i in range(1,7)]
 DEFAULT_IDS=['RS001','RS002','RS003']
-PROFILES={'A':('Quiet','Jazz','Traditional'),'B1':('Restless','Electronic','Adventurous'),'B':('Quiet','Electronic','Adventurous'),'C':('Quiet','Folk','Sociable'),'D':('Quiet','Classical','Reflective'),'E':('Quiet','Jazz','Sociable')}
-SCORES={'A':(3,2,0,1,1,1),'B1':(0,0,3,2,0,0),'B':(1,1,2,3,1,1),'C':(1,2,0,1,3,1),'D':(1,1,0,1,1,3),'E':(2,3,0,1,2,1)}
+PROFILES={'A':('Quiet','Jazz','Traditional'),'B1':('Restless','Electronic','Adventurous'),'B':('Quiet','Electronic','Adventurous'),'C':('Quiet','Folk','Sociable'),'D':('Quiet','Classical','Reflective'),'E':('Quiet','Jazz','Sociable'),'I':('Quiet','Electronic','Adventurous'),'J':('Quiet','Jazz','Traditional')}
+SCORES={'A':(3,2,0,1,1,1),'B1':(0,0,3,2,0,0),'B':(1,1,2,3,1,1),'C':(1,2,0,1,3,1),'D':(1,1,0,1,1,3),'E':(2,3,0,1,2,1),'I':(1,1,2,3,1,1),'J':(3,2,0,1,1,1)}
 
 def candidates(identity,visit=1):return DATA['candidates'].get(identity+'_'+str(visit),DEFAULT_IDS)
 

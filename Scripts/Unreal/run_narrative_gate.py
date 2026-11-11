@@ -11,7 +11,7 @@ for path in a.reuse:
  assert info.get('pass') if name=='cook' else info.get('process_pass'),path
  assert name not in [c['name'] for c in R['checks']],name
  R['checks'].append({'name':name,'pass':True,'reused_process_report':str(pathlib.Path(path).resolve()),'process':info})
-checks=[('editor',['Scripts/Unreal/validate_narrative_editor.py'],{}),('sequence',['Scripts/Unreal/validate_sequence_routing.py'],{}),('integration',['Scripts/Unreal/validate_narrative_integration.py','--rendered','--audio'],{}),('guards',['Scripts/Unreal/validate_history_guards.py','--rendered','--audio'],{}),('week',['Scripts/Unreal/validate_history_week.py','--rendered','--audio'],{})]
+checks=[('editor',['Scripts/Unreal/validate_narrative_editor.py'],{}),('sequence',['Scripts/Unreal/validate_sequence_routing.py'],{}),('integration',['Scripts/Unreal/validate_narrative_integration.py','--rendered','--audio'],{}),('guards',['Scripts/Unreal/validate_history_guards.py','--rendered','--audio'],{}),('week',['Scripts/Unreal/validate_ending_week.py','--rendered','--audio','--title'],{})]
 for choice in (1,2,3):checks.append(('rs00'+str(choice),['Scripts/Unreal/validate_mvp_cycle.py','--rendered','--windowed','--audio'],{'MVP_NATIVE_UI':'1','MVP_RECORD_CHOICE':str(choice),'MVP_RPM':str({1:33,2:45,3:78}[choice]),'MVP_TURNTABLE_APPROACH':'front'}))
 checks += [('isolated',['Scripts/Unreal/validate_mvp_regressions.py','--rendered','--audio'],{}),('audio',['Scripts/Unreal/validate_day_audio.py','--rendered','--audio'],{}),('startup',['Scripts/Unreal/validate_mvp_editor_control.py'],{}),('cook',None,{})]
 if a.only:

@@ -28,7 +28,7 @@ try:
   for v in day.get_editor_property('Visits'):
    if str(v.get_editor_property('CustomerID'))=='A' and v.get_editor_property('VisitNumber')in (2,3):
     assert v.get_editor_property('Narrative')==unreal.load_asset('/Game/RecordShop/Data/Narrative/DA_A'+str(v.get_editor_property('VisitNumber'))+'_Narrative')
-   elif str(v.get_editor_property('CustomerID'))in ('B','C','D','E','F','G','H'):
+   elif str(v.get_editor_property('CustomerID'))in ('B','C','D','E','F','G','H','I','J'):
     assert v.get_editor_property('Narrative')==unreal.load_asset('/Game/RecordShop/Data/Narrative/DA_'+str(v.get_editor_property('CustomerID'))+str(v.get_editor_property('VisitNumber'))+'_Narrative')
    elif v!=visit:assert v.get_editor_property('Narrative') is None, v.get_name()
  R['pass']=True

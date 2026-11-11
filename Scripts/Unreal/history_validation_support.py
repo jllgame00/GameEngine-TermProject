@@ -50,7 +50,7 @@ class MemoryChecks:
    assert bool(context[3])==bool(prior) and payload(context[4])==(prior[-1] if prior else None),'Context included current result'
  def finish(self,flow):
   assert len(self.entries)==16
-  for identity in ['A','B','C','D','E','F','G','H','TEMP_D7_01','TEMP_D7_02']:
+  for identity in ['A','B','C','D','E','F','G','H','I','J']:
    assert self.query(flow,identity)==[x for x in self.entries if x['CustomerID']==identity]
   assert self.entries[0]['RecordID']=='RS002' and self.entries[0]['RecommendationResult']=='GOOD'
   return {'entries':self.entries,'revisit_observations':self.observed,'duplicate_and_copy_isolation':True,'selection_not_recorded':True,'active_reset_rejected':True}

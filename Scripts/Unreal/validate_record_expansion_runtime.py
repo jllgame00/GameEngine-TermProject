@@ -52,7 +52,7 @@ started=time.monotonic();phase={'gen':None,'end':None,'busy':False}
 
 UI='/Game/RecordShop/UI/RecordSelection/WBP_RecordSelect.WBP_RecordSelect_C'
 
-def profile_key(identity,visit):return 'B1'if identity=='F'or identity=='B'and visit==1 else {'G':'C','H':'D'}.get(identity,identity)if identity in ('A','B','C','D','E','G','H')else 'A'
+def profile_key(identity,visit):return 'B1'if identity=='F'or identity=='B'and visit==1 else {'G':'C','H':'D'}.get(identity,identity)if identity in ('A','B','C','D','E','G','H','I','J')else 'A'
 
 def create_card(world,pc):return unreal.get_default_object(unreal.load_class(None,'/Script/UMG.WidgetBlueprintLibrary')).call_method('Create',args=(world,unreal.load_class(None,UI),pc))
 
@@ -100,7 +100,7 @@ def run():
    grades=[SCORES[profile_key(identity,number)][int(r[-1])-1]for r in ids]
    assert len(ids)==len(set(ids))==3
    if identity in ('D','H'):assert sorted(grades)==[0,1,3]
-   elif not identity.startswith('TEMP_D7_'):assert sorted(grades)==[0,2,3]or identity=='B'and number>1 and sorted(grades)==[1,2,3]
+   elif not identity.startswith('TEMP_D7_'):assert sorted(grades)==[0,2,3]or (identity=='I'or identity=='B'and number>1)and sorted(grades)==[1,2,3]
    R['cases'].append(dict(id=identity,visit=number,candidates=ids,scores=scores,candidate_scores=grades,capture=str(capture)));save()
  # All six permutations move RS002 through each slot: no incidental alphabetical order.
  for order in itertools.permutations(['RS006','RS002','RS004']):

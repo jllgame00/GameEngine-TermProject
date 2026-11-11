@@ -14,6 +14,8 @@ try:
  for path,graphs in ref['protected_graphs'].items():
   bp=unreal.load_asset(path)
   for name,sha in graphs.items():
+   from ending_validation_support import graph_hash
+   sha=graph_hash(path,name,sha)
    assert hashlib.sha256(json.dumps(graph(bp,name),sort_keys=True,ensure_ascii=False).encode('utf8')).hexdigest()==sha,(path,name)
    count+=1
  flow=unreal.load_asset('/Game/RecordShop/Core/Flow/BP_GameFlowManager');tt=unreal.load_asset('/Game/RecordShop/Interaction/Actors/BP_Turntable');cdo=unreal.get_default_object(flow.generated_class())

@@ -9,8 +9,11 @@ ROOT=Path(unreal.Paths.project_dir());sys.path.insert(0,str(ROOT/'Scripts/Unreal
 from day_graph_helpers import *
 from narrative_validation_support import digest,struct_value
 from record_expansion_support import candidates,DATA
+from customer_ij_validation_support import DATA as IJ_DATA,PROFILES as IJ_PROFILES,expected_rows as expected_ij_rows,expected_feedback as ij_feedback
 REFERENCE=json.loads((ROOT/'Scripts/Unreal/narrative_reference_baseline.json').read_text(encoding='utf8'))
 HISTORY_TEST=os.environ.get('MVP_HISTORY_VALIDATION')=='1'
+DAY7_ONLY=os.environ.get('MVP_DAY7_ONLY')=='1'
+assert not (DAY7_ONLY and HISTORY_TEST)
 if HISTORY_TEST:
  from history_validation_support import MemoryChecks
  memory=MemoryChecks()
@@ -20,7 +23,7 @@ CUSTOMER='/Game/RecordShop/Characters/Customers/Common/BP_Customer'
 TT='/Game/RecordShop/Interaction/Actors/BP_Turntable';SHELF='/Game/RecordShop/Interaction/Actors/BP_RecordShelf'
 DU='/Game/RecordShop/UI/Dialogue/WBP_Dialogue';SU='/Game/RecordShop/UI/RecordSelection/WBP_RecordSelect';TU='/Game/RecordShop/UI/Turntable/WBP_Turntable';RU='/Game/RecordShop/UI/Result/WBP_Result_IntegrationFallback'
 VC='/Game/RecordShop/Data/Schedule/BP_CustomerVisitDefinition.BP_CustomerVisitDefinition_C'
-EXPECTED=[('A',1,1,1),('E',1,1,2),('B',1,2,1),('C',1,2,2),('A',2,3,1),('F',1,3,2),('D',1,3,3),('B',2,4,1),('C',2,4,2),('A',3,5,1),('G',1,5,2),('B',3,6,1),('D',2,6,2),('H',1,6,3),('TEMP_D7_01',1,7,1),('TEMP_D7_02',1,7,2)]
+EXPECTED=[('A',1,1,1),('E',1,1,2),('B',1,2,1),('C',1,2,2),('A',2,3,1),('F',1,3,2),('D',1,3,3),('B',2,4,1),('C',2,4,2),('A',3,5,1),('G',1,5,2),('B',3,6,1),('D',2,6,2),('H',1,6,3),('I',1,7,1),('J',1,7,2)]
 def save():OUT.write_text(json.dumps(R,indent=2,ensure_ascii=False),encoding='utf8')
 def frames(n=4):
  for _ in range(n):yield
@@ -93,6 +96,13 @@ assert L.compile_blueprint(probe);observer=unreal.get_default_object(probe.gener
 
 def observed():
  return {key:[str(x) if key in ('FinishedIDs','FinalEvents','MemoryIDs') else int(x) for x in observer.get_editor_property(key)] for key in (['StartedDays','EndedDays','FinishedIDs','FinishedVisits','FinalEvents']+(['MemoryIDs','MemoryVisits','MemoryPrevious'] if HISTORY_TEST else []))}
+if DAY7_ONLY:
+ # Unsaved entry fixture skips earlier days; every I/J operation then uses production flow.
+ fixture=unreal.load_asset(FLOW);g=fn(fixture,'BeginDay7Fixture');end=g.find_graph_entry_pin()
+ end=own(g,end,'/Script/UMG.Widget','RemoveFromParent',self=get(g,'PrologueWidgetRef'))
+ for key,value in [('PrologueWidgetRef','None'),('TutorialComplete','true'),('PrologueStage',5),('CurrentDay',6),('DayPhase','DayEnding')]:end=assign(g,end,key,value)
+ end=restore(g,end);own(g,end,FC,'BeginDay',DayNumber=7);assert L.compile_blueprint(fixture)
+ R['scope']='isolated unsaved Day7 entry; natural I/J navigation/UI/playback/result/exit and final hook'
 level=unreal.get_editor_subsystem(unreal.LevelEditorSubsystem);editor=unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
 assert level.load_level('/Game/RecordShop/Maps/Greybox/L_RecordShop_Greybox')
 unreal.EditorPythonScripting.set_keep_python_script_alive(True);level.editor_request_begin_play();started=time.monotonic();phase={'gen':None,'end':None,'busy':False}
@@ -100,15 +110,20 @@ def run():
  global world,flow,pc,pawn,interaction,sub
  while not editor.get_game_world():yield
  world=editor.get_game_world();flow=unreal.GameplayStatics.get_all_actors_of_class(world,cls(FLOW))[0];pc=unreal.GameplayStatics.get_player_controller(world,0);pawn=unreal.GameplayStatics.get_player_pawn(world,0)
+ if os.environ.get('MVP_COLD_TITLE')=='1':
+  from ending_runtime_support import new_game
+  world,flow,pc,pawn=yield from new_game(editor,flow);R['cold_title_to_fresh_new_game']=True
  observer.call_method(bind_name,args=(flow,))
  interaction=pawn.call_method('AddComponentByClass',args=(unreal.WidgetInteractionComponent.static_class(),False,unreal.Transform(),False));interaction.set_component_tick_enabled(False);interaction.activate(True)
  lib=unreal.get_default_object(unreal.load_class(None,'/Script/Engine.SubsystemBlueprintLibrary'));sub=lib.call_method('GetLocalPlayerSubSystemFromPlayerController',args=(pc,unreal.EnhancedInputLocalPlayerSubsystem.static_class()))
  from prologue_validation_support import exercise_opening
  def advance(panel):yield from click(panel,'Continue')
- R['opening']=yield from exercise_opening(world,flow,pc,pawn,advance);save()
+ if DAY7_ONLY:flow.call_method('BeginDay7Fixture');R['opening']='unsaved Day7 entry fixture'
+ else:R['opening']=yield from exercise_opening(world,flow,pc,pawn,advance)
+ save()
  tt=flow.get_editor_property('TurntableRef');shelf=unreal.GameplayStatics.get_all_actors_of_class(world,cls(SHELF))[0]
  home=pawn.get_actor_transform();home_control=pc.get_control_rotation();previous_day=0;previous_bgm_id=None
- for index in range(17):
+ for index in (range(15,17)if DAY7_ONLY else range(17)):
   yield from wait(lambda:len(widgets(DU))==1,35)
   customer=flow.get_editor_property('ActiveCustomer');assert customer
   assert len(unreal.GameplayStatics.get_all_actors_of_class(world,cls(CUSTOMER)))==1,'Duplicate customer'
@@ -169,6 +184,10 @@ def run():
    prior=flow.call_method('GetRecommendationForVisit',args=(expected[0],1))if expected[1]==2 else None
    assert str(manager.get_editor_property('ActiveSequenceID'))==expected[0]+'_V'+str(expected[1])
    assert sequence_rows==expected_cd_rows(expected[0],expected[1],str(prior.get_editor_property('RecommendationResult'))if prior else None)
+  elif expected[0]in ('I','J'):
+   assert str(manager.get_editor_property('ActiveSequenceID'))==expected[0]+'_V1'
+   assert sequence_rows==expected_ij_rows(expected[0])
+   assert not flow.call_method('GetActiveVisitMemory')[3]and not flow.get_editor_property('NarrativeMemoryVisits')
   elif expected[0]in ('E','F','G','H'):
    from customer_efgh_validation_support import expected_efgh_rows
    assert str(manager.get_editor_property('ActiveSequenceID'))==expected[0]+'_V1'
@@ -179,7 +198,7 @@ def run():
   profile_tags=[str(struct_value(active_profile,k))for k in ('Mood','MusicPreference','Personality')]
   from customer_cd_validation_support import PROFILES
   from customer_efgh_validation_support import PROFILES as SINGLE_PROFILES
-  PROFILES={**PROFILES,**SINGLE_PROFILES}
+  PROFILES={**PROFILES,**SINGLE_PROFILES,**IJ_PROFILES}
   expected_tags=list(PROFILES[expected[0]])if expected[0]in PROFILES else ['Restless'if expected[1]==1 else 'Quiet','Electronic','Adventurous']if expected[0]=='B'else ['Quiet','Jazz','Traditional']
   assert profile_tags==expected_tags
   R.setdefault('runtime_profiles',[]).append({'customer':expected[0],'visit':expected[1],'tags':profile_tags})
@@ -199,7 +218,7 @@ def run():
     capture=OUT.with_name(OUT.stem+'-'+expected[0]+str(expected[1])+'-line'+str(lines)+'.png')
     unreal.SystemLibrary.execute_console_command(world,'Shot showui filename="'+str(capture)+'" -nosuffix')
     R.setdefault('cd_ui_captures',[]).append(str(capture));yield from frames(4)
-   if expected[0]in SINGLE_PROFILES:
+   if expected[0]in SINGLE_PROFILES or expected[0]in IJ_PROFILES:
     capture=OUT.with_name(OUT.stem+'-'+expected[0]+'1-line'+str(lines)+'.png')
     unreal.SystemLibrary.execute_console_command(world,'Shot showui filename="'+str(capture)+'" -nosuffix')
     R.setdefault('efgh_ui_captures',[]).append(str(capture));yield from frames(4)
@@ -217,6 +236,7 @@ def run():
   if expected[0]in SINGLE_PROFILES:
    authored=json.loads((ROOT/'Scripts/Unreal/customer_efgh_dialogue.json').read_text(encoding='utf8'))[expected[0]]['rows']
    assert seen==[authored[row]for row in sequence_rows]
+  if expected[0]in IJ_PROFILES:assert seen==list(IJ_DATA[expected[0]]['rows'].values())
   if index==1:assert digest(seen)==REFERENCE['a1_display_lines_sha256']
   assert not manager.get_editor_property('DialogueList') and manager.get_editor_property('ActiveDialogueSource') is None and manager.get_editor_property('PendingDialogueSource') is None
   assert pc.get_view_target()==pawn and not pc.get_editor_property('show_mouse_cursor')
@@ -226,6 +246,7 @@ def run():
   elif expected[0]in ('C','G'):choice=5
   elif expected[0]in ('D','H'):choice=6
   elif expected[0]in SINGLE_PROFILES:choice={'E':2,'F':3}[expected[0]]
+  elif expected[0]in IJ_PROFILES:choice={'BEST':{'I':4,'J':1},'GOOD':{'I':3,'J':2},'POOR':{'I':1,'J':3}}[os.environ.get('MVP_DAY7_GRADE','BEST')][expected[0]]
   ids=candidates(expected[0],expected[1]);selection=widgets(SU)[0]
   assert list(map(str,flow.call_method('GetActiveCandidateRecordIDs')))==ids
   assert list(map(str,selection.get_editor_property('ResolvedCandidateIDs')))==ids
@@ -279,7 +300,18 @@ def run():
   result_bgm_path=result_bgm.get_path_name();result_finish_count=observer.get_editor_property('NaturalBGMFinishes')
   observer.call_method(ambient_bind_name,args=(result_bgm,));result_bgm=None
   if HISTORY_TEST:memory.result(flow,expected,index,choice)
+  if DAY7_ONLY:
+   from history_validation_support import payload
+   before_history=[payload(x)for x in flow.get_editor_property('RecommendationHistory')]
+   assert len(before_history)==index-14 and before_history[-1]['CustomerID']==expected[0]
+   for _ in range(3):flow.call_method('HandleTurntableCompleted');flow.call_method('CommitRecommendationHistory')
+   assert [payload(x)for x in flow.get_editor_property('RecommendationHistory')]==before_history
   result=widgets(RU)[0];assert result.get_editor_property('Continue').has_keyboard_focus()
+  if expected[0]in IJ_PROFILES:
+   feedback=str(result.get_editor_property('ScoreStatus').get_text());assert feedback==ij_feedback(expected[0],score)
+   capture=OUT.with_name(OUT.stem+'-'+expected[0]+'1-result.png')
+   unreal.SystemLibrary.execute_console_command(world,'Shot showui filename="'+str(capture)+'" -nosuffix');yield from frames(4)
+   R.setdefault('ij_result_feedback',[]).append({'customer':expected[0],'score':score,'text':feedback,'capture':str(capture)})
   if expected[0]in ('B','C','D','E','F','G','H'):
    from customer_b_validation_support import expected_result
    neutral=json.loads((Path(unreal.Paths.project_dir())/'Scripts/Unreal/preference_result_feedback.json').read_text(encoding='utf-8-sig'))
@@ -296,44 +328,73 @@ def run():
   # Restore fixture-only approach location so the player cannot block the exit route.
   pawn.set_actor_transform(home,False,True);pc.set_control_rotation(home_control)
   yield from wait(lambda:flow.get_editor_property('ActiveCustomer') is None,15)
-  assert pc.get_view_target()==pawn and not pc.get_editor_property('show_mouse_cursor')
+  assert pc.get_view_target()==pawn and pc.get_editor_property('show_mouse_cursor')==(index==16)
   assert not any(widgets(p) for p in (DU,SU,TU,RU))
   for _ in range(3):flow.call_method('HandleCustomerExited')
   R['cycles'].append({'id':expected[0],'visit':expected[1],'day':expected[2],'listening_to_result_seconds':elapsed,'choice':choice,'slot':slot,'candidates':ids,'audio':selected_audio.get_path_name(),'score':score,'store_bgm_played':True,'store_bgm_id':selected_id,'store_bgm_component':result_bgm_path,'no_overlap':True,'continue_no_restart':True,'recovered':True});R['events']=observed();save()
- assert set(DATA['records']).issubset({'RS00'+str(c['choice'])for c in R['cycles']})
+ if not DAY7_ONLY:assert set(DATA['records']).issubset({'RS00'+str(c['choice'])for c in R['cycles']})
  yield from wait(lambda:flow.get_editor_property('FinalStoryEventTriggered'),8)
- events=observed();assert events['StartedDays']==events['EndedDays']==list(range(1,8)),events
- assert list(zip(events['FinishedIDs'],events['FinishedVisits']))==[(x[0],x[1]) for x in EXPECTED],events
+ events=observed();assert events['StartedDays']==events['EndedDays']==([7]if DAY7_ONLY else list(range(1,8))),events
+ assert list(zip(events['FinishedIDs'],events['FinishedVisits']))==[(x[0],x[1]) for x in (EXPECTED[-2:]if DAY7_ONLY else EXPECTED)],events
  assert events['FinalEvents']==['FinalStoryEvent'],events
  for _ in range(5):flow.call_method('FinishDayTransition');flow.call_method('EndCurrentDay');flow.call_method('SpawnQueuedCustomer')
  until=time.monotonic()+1
  while time.monotonic()<until:yield
  assert observed()==events and flow.get_editor_property('CurrentDay')==7 and str(flow.get_editor_property('DayPhase'))=='FinalStoryEvent'
  assert flow.get_editor_property('ActiveCustomer') is None and not unreal.GameplayStatics.get_all_actors_of_class(world,cls(CUSTOMER))
- assert flow.get_editor_property('StoreBGMRef') is None and not flow.get_editor_property('StoreBGMRequested')
+ assert str(flow.get_editor_property('PresentationPhase'))=='EndingDialogue'
+ assert flow.get_editor_property('StoreBGMRef')and flow.get_editor_property('StoreBGMRef').is_playing()
+ assert str(flow.get_editor_property('CurrentStoreBGMRecordID'))==previous_bgm_id
  before=pawn.get_actor_location();until=time.monotonic()+.35
  while time.monotonic()<until:
   sub.inject_input_vector_for_action(unreal.load_asset('/Game/Input/Actions/IA_Move'),unreal.Vector(0,-.25,0),[],[]);yield
- assert (pawn.get_actor_location()-before).length()>5
- R.update(complete=True,**{'pass':True},events=events,final_day=7,queue_visits=16,tutorial_customers=1)
+ assert (pawn.get_actor_location()-before).length()<.5,'Ending leaked gameplay movement'
+ R.update(events=events,final_day=7,queue_visits=2 if DAY7_ONLY else 16,tutorial_customers=0 if DAY7_ONLY else 1)
+ if DAY7_ONLY:
+  R['history']=[payload(x)for x in flow.get_editor_property('RecommendationHistory')]
+  assert [x['CustomerID']for x in R['history']]==['I','J']
  if HISTORY_TEST:
-  interaction.destroy_component(pawn)
   R['complete']=False;R['pass']=False
   R['history']=memory.finish(flow)
   assert events['MemoryIDs']==[x[0] for x in EXPECTED] and events['MemoryVisits']==[x[1] for x in EXPECTED]
   assert events['MemoryPrevious']==[int(x[1]>1) for x in EXPECTED]
-  # A New Game is a fresh world/manager, exactly as production map startup.
-  level.editor_request_end_play()
-  while editor.get_game_world():yield
-  level.editor_request_begin_play()
-  while not editor.get_game_world():yield
-  fresh_world=editor.get_game_world();fresh=unreal.GameplayStatics.get_all_actors_of_class(fresh_world,cls(FLOW))[0]
+ from ending_runtime_support import finish_ending,new_game
+ R['complete']=False;R['pass']=False
+ title_context=yield from finish_ending(editor,flow,interaction,R,OUT,captures=not DAY7_ONLY)
+ fresh_world,fresh,fresh_pc,fresh_pawn=yield from new_game(editor,title_context[1])
+ R['ending_to_credits_to_title']=True;R['title_new_game_fresh_world']=True
+ if HISTORY_TEST:
   assert not fresh.get_editor_property('RecommendationHistory') and fresh.get_editor_property('CurrentDay')==0 and not fresh.get_editor_property('TutorialComplete')
-  for identity in ('A','B','C','D','E','F','G','H'):
+  for identity in ('A','B','C','D','E','F','G','H','I','J'):
    assert not fresh.call_method('HasPreviousVisit',args=(identity,)) and not fresh.call_method('GetRecommendationHistory',args=(identity,))
   R['history']['new_game_fresh_session_empty']=True
+  # Finish the new session's actual Tutorial too, rather than inferring Day1 from reset defaults.
+  world,flow,pc,pawn=fresh_world,fresh,fresh_pc,fresh_pawn
+  interaction=pawn.call_method('AddComponentByClass',args=(unreal.WidgetInteractionComponent.static_class(),False,unreal.Transform(),False));interaction.set_component_tick_enabled(False);interaction.activate(True)
+  sub=lib.call_method('GetLocalPlayerSubSystemFromPlayerController',args=(pc,unreal.EnhancedInputLocalPlayerSubsystem.static_class()))
+  R['restart_opening']=yield from exercise_opening(world,flow,pc,pawn,advance)
+  restart_home=pawn.get_actor_transform();restart_control=pc.get_control_rotation()
+  yield from wait(lambda:len(widgets(DU))==1,35)
+  assert str(flow.get_editor_property('DialogueManagerRef').get_editor_property('ActiveSequenceID'))=='TUTORIAL_Training'
+  for _ in range(5):yield from click(widgets(DU)[0],'Next')
+  assert not widgets(DU)and not flow.get_editor_property('RecommendationHistory')
+  shelf=unreal.GameplayStatics.get_all_actors_of_class(world,cls(SHELF))[0];tt=flow.get_editor_property('TurntableRef')
+  yield from interact(shelf,SU);selection=widgets(SU)[0]
+  assert str(struct_value(selection.get_editor_property('CardRecord1'),'RecordID'))=='RS001'
+  yield from click(selection,'BTN_LP01');yield from interact(tt,TU);panel=widgets(TU)[0]
+  for button in ('BTN_OpenLid','BTN_PlaceRecord','BTN_SelectRPM','BTN_RPM33','BTN_MoveTonearm','BTN_Play'):
+   yield from wait(lambda:panel.get_editor_property(button).get_is_enabled(),8);yield from click(panel,button)
+  assert tt.get_editor_property('PlaybackAudio')and tt.get_editor_property('PlaybackAudio').is_playing()
+  yield from wait(lambda:len(widgets(RU))==1,16);assert not flow.get_editor_property('RecommendationHistory')
+  yield from click(widgets(RU)[0],'Continue');pawn.set_actor_transform(restart_home,False,True);pc.set_control_rotation(restart_control)
+  yield from wait(lambda:flow.get_editor_property('TutorialComplete')and flow.get_editor_property('CurrentDay')==1 and flow.get_editor_property('ActiveVisit')is not None,20)
+  assert str(flow.get_editor_property('ActiveVisit').get_editor_property('CustomerID'))=='A'
+  assert not flow.get_editor_property('RecommendationHistory')and not flow.get_editor_property('FinalStoryEventTriggered')
+  assert str(flow.get_editor_property('PresentationPhase'))=='Playing'and flow.get_editor_property('EndingWidgetRef')is None and flow.get_editor_property('TitleWidgetRef')is None
+  assert not tt.get_editor_property('HasRecord')and flow.get_editor_property('StoreBGMRef')is None
+  R['restart_tutorial_to_day1']={'additional_new_session_tutorial_cycles':1,'day':1,'customer':'A','history':0,'audio_leak':False,'ui_leak':False}
   R['complete']=True;R['pass']=True
- if not HISTORY_TEST:interaction.destroy_component(pawn)
+ R.update(complete=True,**{'pass':True})
  save()
 
 def tick(delta):
@@ -348,6 +409,6 @@ def tick(delta):
   assert time.monotonic()-started<850,'Full week timeout'
   next(phase['gen'])
  except StopIteration:level.editor_request_end_play();phase['end']=time.monotonic()
- except Exception:R['fatal']=traceback.format_exc();R['complete']=True;save();level.editor_request_end_play();phase['end']=time.monotonic()
+ except Exception:R['fatal']=traceback.format_exc();R['pass']=False;R['complete']=True;save();level.editor_request_end_play();phase['end']=time.monotonic()
  finally:phase['busy']=False
 handle=unreal.register_slate_post_tick_callback(tick)

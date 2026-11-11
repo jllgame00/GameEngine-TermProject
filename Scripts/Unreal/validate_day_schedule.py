@@ -7,7 +7,7 @@ try:
     root='/Game/RecordShop/Data/Schedule/'
     week=unreal.load_asset(root+'DA_TemporaryWeek')
     assert week, 'Missing production seven-day schedule'
-    expected=[ [('A',1),('E',1)], [('B',1),('C',1)], [('A',2),('F',1),('D',1)], [('B',2),('C',2)], [('A',3),('G',1)], [('B',3),('D',2),('H',1)], [('TEMP_D7_01',1),('TEMP_D7_02',1)] ]
+    expected=[ [('A',1),('E',1)], [('B',1),('C',1)], [('A',2),('F',1),('D',1)], [('B',2),('C',2)], [('A',3),('G',1)], [('B',3),('D',2),('H',1)], [('I',1),('J',1)] ]
     days=week.get_editor_property('Days');assert len(days)==7
     observed=[];counts={}
     for day,entries in enumerate(expected,1):

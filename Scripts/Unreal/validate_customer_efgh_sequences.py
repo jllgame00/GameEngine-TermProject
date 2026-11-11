@@ -14,6 +14,12 @@ VC='/Game/RecordShop/Data/Schedule/BP_CustomerVisitDefinition.BP_CustomerVisitDe
 CC='/Game/RecordShop/Characters/Customers/Common/BP_Customer.BP_Customer_C';C01='/Game/RecordShop/Characters/Customers/Customer01/Blueprints/BP_Customer01.BP_Customer01_C'
 OUT=Path(os.environ['MVP_RESULT']);R={'complete':False,'pass':False,'scope':'isolated GFM/DM emitted-line/profile/score/real Result text fixtures; no natural-cycle claim','cases':[]}
 DATA=json.loads((ROOT/'Scripts/Unreal/customer_efgh_dialogue.json').read_text(encoding='utf-8-sig'))
+IJ=os.environ.get('MVP_SINGLE_VISIT_SET')=='IJ'
+if IJ:
+ from customer_ij_validation_support import DATA,PROFILES,expected_rows as expected_efgh_rows,expected_feedback
+ DAYS={k:7 for k in PROFILES};SCORES={k:tuple(v['scores'])for k,v in DATA.items()}
+ R['scope']='I/J isolated emitted-line/profile/all six scores/actual Result branches; natural exit covered by week'
+def feedback(identity,score):return expected_feedback(identity,score)if IJ else NEUTRAL_FEEDBACK[expected_result(score)]
 def save():OUT.write_text(json.dumps(R,ensure_ascii=False,indent=2),encoding='utf8')
 def frames(n=2):
  for _ in range(n):yield
@@ -54,6 +60,8 @@ def cleared(dm):
 def run():
  while not editor.get_game_world():yield
  world=editor.get_game_world();flow=unreal.GameplayStatics.get_all_actors_of_class(world,unreal.load_class(None,FC))[0];flow.set_editor_property('EnableDaySchedule',False)
+ R['boot_observation']={'phase':str(flow.get_editor_property('PresentationPhase')),'stage':flow.get_editor_property('PrologueStage'),'options':unreal.GameplayStatics.get_game_mode(world).get_editor_property('options_string'),'command':unreal.SystemLibrary.get_command_line()};save()
+ assert R['boot_observation']['phase']=='Playing','Legacy fixture requires explicit Prologue validation boot'
  for _ in range(3):flow.call_method('AdvancePrologue');yield from frames()
  deadline=time.monotonic()+40
  while not flow.get_editor_property('DialogueWidgetRef'):
@@ -97,26 +105,26 @@ def run():
   before_finish=observer.get_editor_property('Finishes');dm.call_method('CancelDialogueSequence');cleared(dm)
   flow.call_method('PrepareRevisitMemory');dm.call_method('StartDialogue');dm.call_method('CancelDialogueSequence');cleared(dm)
   assert observer.get_editor_property('Finishes')==before_finish
-  for choice in (1,2,3):
+  for choice in (range(1,7)if IJ else (1,2,3)):
    rid='RS00'+str(choice);found,record=flow.get_editor_property('RecordCatalogue').call_method('ResolveRecord',args=(rid,));assert found
    flow.call_method('SetGameFlowState',args=(selection_state,));flow.call_method('ResetRawScore');flow.call_method('HandleRecordSelected',args=(record,))
    score=SCORES[identity][choice-1];assert flow.get_editor_property('RawRecommendationScore')==score
    assert dm.call_method('CalculateLPScore',args=(str(struct_value(record,'Mood')),str(struct_value(record,'Genre')),str(struct_value(record,'Theme'))))==score
    panel=unreal.get_default_object(unreal.load_class(None,'/Script/UMG.WidgetBlueprintLibrary')).call_method('Create',args=(world,unreal.load_class(None,'/Game/RecordShop/UI/Result/WBP_Result_IntegrationFallback.WBP_Result_IntegrationFallback_C'),unreal.GameplayStatics.get_player_controller(world,0)))
-   panel.call_method('SetRawScoreDisplay',args=(True,score));assert str(panel.get_editor_property('ScoreStatus').get_text())==NEUTRAL_FEEDBACK[expected_result(score)]
+   panel.call_method('SetRawScoreDisplay',args=(True,score));assert str(panel.get_editor_property('ScoreStatus').get_text())==feedback(identity,score)
    assert str(flow.call_method('ClassifyRecommendationScore',args=(score,)))==expected_result(score)
    R.setdefault('actual_scores',[]).append(dict(customer=identity,record=rid,score=score,result=expected_result(score)))
   # Inject only widget input, never a production score/history/record, for unreachable grades.
   for score in (0,1,2,3):
-   panel.call_method('SetRawScoreDisplay',args=(True,score));assert str(panel.get_editor_property('ScoreStatus').get_text())==NEUTRAL_FEEDBACK[expected_result(score)]
+   panel.call_method('SetRawScoreDisplay',args=(True,score));assert str(panel.get_editor_property('ScoreStatus').get_text())==feedback(identity,score)
   panel.call_method('SetRawScoreDisplay',args=(False,3));assert str(panel.get_editor_property('ScoreStatus').get_text())==FEEDBACK_REFERENCE['UNAVAILABLE']
   for rid in ('RS004','RS005','RS006'):assert flow.get_editor_property('RecordCatalogue').call_method('ResolvePlayableRecord',args=(rid,))[0]
   assert not flow.get_editor_property('RecommendationHistory'),'Selection recorded History'
  # Fresh base profile models the actual spawn authority, including F->D on Day3.
  for identity,asset_name,tags,sequence,rows in [
-  ('F','F_1',PROFILES['F'],'F_V1',expected_efgh_rows('F')),
+  ('F','F_1',('Restless','Electronic','Adventurous'),'F_V1',['F1_Current_%02d'%i for i in range(1,5)]),
   ('D','D_1',('Quiet','Classical','Reflective'),'D_V1',['D1_Current_%02d'%i for i in range(1,6)]),
-  ('E','E_1',PROFILES['E'],'E_V1',expected_efgh_rows('E')),
+  ('E','E_1',('Quiet','Jazz','Sociable'),'E_V1',['E1_Current_%02d'%i for i in range(1,5)]),
   ('A','A_1',('Quiet','Jazz','Traditional'),'A_Visit1',['C01_Quiet_%02d'%i for i in range(1,6)]),
   ('TEMP_D7_01','TEMP_D7_01_1',('Quiet','Jazz','Traditional'),'LEGACY_MOOD',['C01_Quiet_%02d'%i for i in range(1,6)])]:
   visit=unreal.load_asset('/Game/RecordShop/Data/Schedule/DA_Visit_'+asset_name);assert visit,asset_name

@@ -9,4 +9,8 @@ def assert_asset_hash(path,expected):
  if path in changed:
   assert expected==changed[path]['before'],path+' unknown baseline'
   expected=changed[path]['after']
+ from customer_ij_validation_support import migrated_hash
+ expected=migrated_hash(path,expected)
+ from ending_validation_support import migrated_hash as ending_hash
+ expected=ending_hash(path,expected)
  assert hashlib.sha256((ROOT/path).read_bytes()).hexdigest()==expected,path
