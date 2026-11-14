@@ -1,6 +1,6 @@
 """Observe one contiguous production cycle; no downstream function/event injection.
 
-Authored Customer01 dialogue and catalogue are used unchanged. Enhanced Input IA_Interact,
+Tutorial instructions, original C01 presentation and shared catalogue are used. Enhanced Input IA_Interact,
 Slate navigation/Enter and native Windows Enter messages are synthetic.
 Use --rendered --windowed for native Result Enter or --result-navigation for
 NullRHI virtual-user Tab/Enter. Both assert production focus without setting it.
@@ -34,18 +34,14 @@ SU='/Game/RecordShop/UI/RecordSelection/WBP_RecordSelect'
 TU='/Game/RecordShop/UI/Turntable/WBP_Turntable'
 RU='/Game/RecordShop/UI/Result/WBP_Result_IntegrationFallback'
 CUSTOMER='/Game/RecordShop/Characters/Customers/Common/BP_Customer'
-R={'complete':False,'pass':False,'started_utc':datetime.now(timezone.utc).isoformat(),'stages':[],'compiles':{},'fixture':'production authored Customer01 content; no generated or saved fixture','input':'synthetic Enhanced Input IA_Interact + synthetic Slate Enter; Result uses native Windows Enter or virtual Slate Tab/Enter with production focus asserted; pawn positioned for collision; customer route untouched'}
+R={'complete':False,'pass':False,'started_utc':datetime.now(timezone.utc).isoformat(),'stages':[],'compiles':{},'fixture':'production TUTORIAL instructions, C01 presentation and shared catalogue; no saved fixture','input':'synthetic Enhanced Input IA_Interact + synthetic Slate Enter; Result uses native Windows Enter or virtual Slate Tab/Enter with production focus asserted; pawn positioned for collision; customer route untouched'}
 CHOICE=int(os.environ.get('MVP_RECORD_CHOICE','1'))
 assert CHOICE in (1,2,3)
 EXPECTED_SCORE={1:3,2:2,3:0}[CHOICE]
 EXPECTED_CATEGORY={1:'최고의 선택',2:'좋은 선택',3:'아쉬운 선택'}[CHOICE]
-OWNER_LINES=[
- '젊은 친구, 자네도 그렇게 생각하나?',
- '아니, 요즘 화제가 되는 사회적 이슈 모르나? 요새 젊은이들로부터 취업이 예전만큼 되지 않는다는 얘기를 들었네.',
- '정말 버르장머리 없는 소리이지 않나?',
- '자기네들이 열심히 하지 않는 것은 생각하지 않고 남탓만 할 줄 알고, 하여간 요즘 얘들은 말이야, 쯧쯧.',
- '어이, 젊은 친구, 빨리 음악이나 틀어보게. 지금 내 마음 속 불쾌감을 씻어내야 겠어.',
-]
+from narrative_validation_support import text_literal,struct_value
+import json
+OWNER_LINES=[text_literal(row['Text']) for row in json.loads(unreal.DataTableFunctionLibrary.export_data_table_to_json_string(unreal.load_asset('/Game/RecordShop/Data/Narrative/DT_TutorialDialogue')))]
 R['record_choice']=CHOICE
 if NATIVE_UI:
  assert os.environ.get('MVP_RESULT_NAVIGATION')!='1', 'Native UI requires --rendered --windowed'
@@ -237,7 +233,17 @@ if NATIVE_UI:
  user32.ShowWindow(hwnd,9)
  assert user32.SetWindowPos(hwnd,None,0,0,width,height,0x16),ctypes.get_last_error()
  R['native_window_size']=[width,height];save()
-unreal.EditorPythonScripting.set_keep_python_script_alive(True);level.editor_request_begin_play()
+unreal.EditorPythonScripting.set_keep_python_script_alive(True)
+if IMMERSIVE:
+ # F11 layout + native window resize are test setup, not gameplay. Let Slate
+ # settle them before requesting PIE; do not overlap their deferred focus work.
+ _viewport_settle_started=time.monotonic()
+ def _begin_after_viewport_settles(delta):
+  if time.monotonic()-_viewport_settle_started>.5:
+   unreal.unregister_slate_post_tick_callback(_begin_handle)
+   level.editor_request_begin_play()
+ _begin_handle=unreal.register_slate_post_tick_callback(_begin_after_viewport_settles)
+else:level.editor_request_begin_play()
 start=time.monotonic();phase={'generator':None,'end':None}
 
 def run():
@@ -246,6 +252,16 @@ def run():
  world=editor.get_game_world();flow=unreal.GameplayStatics.get_all_actors_of_class(world,cls(FLOW))[0]
  pc=unreal.GameplayStatics.get_player_controller(world,0);pawn=unreal.GameplayStatics.get_player_pawn(world,0)
  mark('Greybox startup')
+ interaction=None
+ if not NATIVE_UI:
+  interaction=pawn.call_method('AddComponentByClass',args=(unreal.WidgetInteractionComponent.static_class(),False,unreal.Transform(),False))
+  interaction.set_component_tick_enabled(False);interaction.activate(True)
+ from prologue_validation_support import exercise_opening
+ def advance_opening(panel):
+  if NATIVE_UI:yield from native_enter()
+  else:yield from click(panel,'Continue')
+ R['opening']=yield from exercise_opening(world,flow,pc,pawn,advance_opening,capture)
+ save()
  entry_captured=False
  while not widgets(DU):
   assert time.monotonic()-start<70,'Customer did not naturally reach dialogue'
@@ -257,6 +273,9 @@ def run():
   yield
  state(1);customer=flow.get_editor_property('ActiveCustomer');assert customer
  manager=flow.get_editor_property('DialogueManagerRef');assert manager.get_editor_property('CurrentLineIndex')==1
+ assert str(struct_value(flow.get_editor_property('ActiveCustomer').get_editor_property('CustomerProfile'),'CustomerID'))=='TUTORIAL'
+ assert list(map(str,manager.get_editor_property('DialogueList')))==['TUTORIAL_%02d'%i for i in range(1,6)]
+ assert str(manager.get_editor_property('ActiveSequenceID'))=='TUTORIAL_Training'
  assert manager.get_editor_property('CurrentCustomer').export_text()==customer.get_editor_property('CustomerProfile').export_text()
  assert manager.get_editor_property('CurrentMood')=='Quiet'
  assert len(widgets(DU))==1;mark('Spawn -> entry -> Ready -> StartDialogue -> UI',line_index=1)
@@ -303,10 +322,6 @@ def run():
  # Save after the player's initial gravity settling, before interaction geometry
  # changes its movement mode or location. The spawn-frame Z is not a floor pose.
  startup_location=pawn.get_actor_location();startup_rotation=pawn.get_actor_rotation();startup_control_rotation=pc.get_control_rotation()
- interaction=None
- if not NATIVE_UI:
-  interaction=pawn.call_method('AddComponentByClass',args=(unreal.WidgetInteractionComponent.static_class(),False,unreal.Transform(),False))
-  interaction.set_component_tick_enabled(False);interaction.activate(True)
  seen_lines=[]
  while widgets(DU):
   dialogue=widgets(DU)[0]
@@ -317,20 +332,20 @@ def run():
   position=unreal.SlateLibrary.local_to_absolute(geometry,unreal.Vector2D(0,0))
   size=unreal.SlateLibrary.get_local_size(geometry)
   R.setdefault('dialogue_next_geometry',[]).append({'line':len(seen_lines)+1,'position':[position.x,position.y],'size':[size.x,size.y],'available':size.x>0 and size.y>0})
-  assert speaker=='중년 손님' and text.strip()
+  assert speaker=='연습 손님' and text.strip()
   seen_lines.append(text)
   R['authored_lines_observed']=seen_lines;save()
   assert len(seen_lines)<=len(OWNER_LINES)
   yield from capture('dialogue-line-'+str(len(seen_lines)))
   yield from click(dialogue,'Next')
- assert seen_lines==OWNER_LINES, 'Runtime dialogue differs from the owner text'
+ assert seen_lines==OWNER_LINES, 'Runtime dialogue differs from the tutorial source'
  if '-nullrhi' not in unreal.SystemLibrary.get_command_line().lower():
   positions=[s['position'] for s in R['dialogue_next_geometry'] if s['available']]
   if positions:
    assert len(positions)==len(OWNER_LINES), 'Inconsistent cached geometry availability'
    assert all(abs(p[0]-positions[0][0])<.5 and abs(p[1]-positions[0][1])<.5 for p in positions), 'Next button moved with dialogue length'
   else:R['dialogue_next_position_validation']='Cached Slate geometry unavailable; exact position must be verified from the five rendered screenshots, not zero-valued metadata.'
- assert [str(k) for k in manager.get_editor_property('DialogueList')]==['C01_Quiet_%02d'%i for i in range(1,6)]
+ assert not manager.get_editor_property('DialogueList') and manager.get_editor_property('ActiveDialogueSource') is None and manager.get_editor_property('PendingDialogueSource') is None
  R['authored_lines_observed']=seen_lines;save()
  assert not widgets(DU);state(2);assert not pc.get_editor_property('show_mouse_cursor');mark('Next -> finished -> RecordSelection')
  assert pc.get_view_target()==pawn, 'Dialogue did not restore player camera'
@@ -559,7 +574,8 @@ def run():
  assert sound.get_name()=={1:'RS001_Best',2:'RS002_Good',3:'RS003_Poor'}[CHOICE]
  assert tt.get_editor_property('TonearmMotionAlpha')==1, 'Audio began before stylus contact'
  R['selected_audio']={'path':sound.get_path_name(),'duration':sound.get_editor_property('duration'),'component':audio.get_path_name(),'tonearm_alpha_at_start':1,'fade_state_at_start':str(audio.get_play_state())};save()
- # Observe production audio playback and the physical arm return.
+ listening_started=unreal.GameplayStatics.get_time_seconds(world)
+ # Observe the configured ten-second listening window and physical arm return.
  # No completion calls or state writes supply this transition.
  deadline=time.monotonic()+50
  captured=set()
@@ -571,6 +587,9 @@ def run():
   # reference; a retained Python proxy may already have been collected by UE.
   active_audio=tt.get_editor_property('PlaybackAudio')
   playing=bool(active_audio and active_audio.is_playing())
+  hint=flow.get_editor_property('TutorialHintRef')
+  if playing and time.monotonic()>deadline-49.6:
+   assert hint is None or hint.get_visibility()==unreal.SlateVisibility.COLLAPSED, 'Tutorial hint interrupts Listening'
   label='selected-LP-playing' if playing and returning>=1 else ('tonearm-lifting' if returning<0.35 else 'tonearm-returning')
   rot=tt.get_editor_property('TonearmPivot').get_editor_property('relative_rotation')
   R.setdefault('natural_playback_motion',[]).append({'stage':label,'roll':rot.roll,'yaw':rot.yaw,'return_alpha':returning,'remaining':remaining,'audio_playing':playing})
@@ -578,6 +597,8 @@ def run():
   if label not in captured and visible_phase:
    captured.add(label);request_capture(label)
   yield
+ R['listening_to_result_seconds']=unreal.GameplayStatics.get_time_seconds(world)-listening_started
+ assert 9.5<=R['listening_to_result_seconds']<=14, R['listening_to_result_seconds']
  assert {'selected-LP-playing','tonearm-lifting','tonearm-returning'} <= captured
  assert min(s['roll'] for s in R['natural_playback_motion']) < -12, 'No visible arm lift'
  assert tt.get_editor_property('TurntableStep')==5;assert tt.get_editor_property('CompletionSent');assert len(widgets(RU))==1;assert not widgets(TU);state(5)
@@ -609,8 +630,13 @@ def run():
   assert pc.get_view_target()==flow.get_editor_property('ResultCamera'), 'Result camera changed while waiting for Continue'
   assert result.get_editor_property('Continue').has_keyboard_focus(), 'Result lost production keyboard focus'
   yield
+ assert not flow.get_editor_property('TutorialComplete'), 'Tutorial completed before Result Continue'
  before=customer.get_actor_location();yield from continue_with_default_focus(result)
  assert not widgets(RU);assert flow.get_editor_property('ResultSubmitted');assert not pc.get_editor_property('show_mouse_cursor')
+ store=flow.get_editor_property('StoreBGMRef');assert store and store.is_playing(), 'Result Continue did not restore Store BGM'
+ assert store.get_editor_property('sound')==struct_value(tt.get_editor_property('CurrentRecord'),'Audio')
+ assert str(flow.get_editor_property('CurrentStoreBGMRecordID'))==f'RS00{CHOICE}'
+ R['store_bgm_after_result']=store.get_editor_property('sound').get_path_name();save()
  mark('Result Continue -> FinishResult -> customer exit route',before_exit=str(before))
  # The interaction fixture moved the player to the turntable. Restore only the
  # player's settled pre-interaction viewpoint after the real Continue handler; customer and
@@ -621,6 +647,7 @@ def run():
  exit_captured=False
  exit_view_frames=0
  while flow.get_editor_property('ActiveCustomer'):
+  assert not flow.get_editor_property('TutorialComplete'), 'Tutorial completed before customer exit'
   assert time.monotonic()-start<150,'Exit route did not finish'
   sample=observe_customer('exit',exit_view_frames<4)
   exit_view_frames+=1
@@ -632,7 +659,9 @@ def run():
  assert max(s['speed_xy'] for s in R['customer_observations']) <= 181, 'Customer exceeded measured walking pace'
  state(0);no_modals();assert not pc.get_editor_property('show_mouse_cursor');assert flow.get_editor_property('DialogueWidgetRef') is None;assert flow.get_editor_property('ResultWidgetRef') is None
  assert pc.get_view_target()==pawn, 'Result did not restore player camera'
- mark('CustomerExited -> ActiveCustomer cleared -> Explore',after_exit=str(customer.get_actor_location()))
+ assert flow.get_editor_property('TutorialComplete') and flow.get_editor_property('PrologueStage')==5
+ assert flow.get_editor_property('TutorialResultSubmitted')
+ mark('CustomerExited -> ActiveCustomer cleared -> Explore',after_exit='destroyed after actual exit',tutorial_complete=True)
  yield from capture('explore')
  # Exercise restored game input rather than only checking cursor/camera flags.
  lib=unreal.get_default_object(unreal.load_class(None,'/Script/Engine.SubsystemBlueprintLibrary'))
@@ -659,6 +688,18 @@ def run():
   yield from capture('wide-store-diagnostic-camera')
   pc.set_view_target_with_blend(pawn,0);camera.destroy_actor()
   R.setdefault('viewpoint_observations',[]).append({'stage':'wide-store','provenance':'Temporary diagnostic camera after completed natural Explore; restored player view; no asset saves or gameplay state changes'})
+ # Queue handoff replaces the old permanently-idle Explore expectation.
+ deadline=time.monotonic()+12
+ while not flow.get_editor_property('ActiveCustomer'):
+  assert time.monotonic()<deadline, 'Tutorial did not hand off to Day 1'
+  yield
+ assert flow.get_editor_property('CurrentDay')==1 and flow.get_editor_property('CurrentCustomerIndex')==0
+ visit=flow.get_editor_property('ActiveVisit')
+ assert str(visit.get_editor_property('CustomerID'))=='A' and visit.get_editor_property('VisitNumber')==1
+ assert len(unreal.GameplayStatics.get_all_actors_of_class(world,cls(CUSTOMER)))==1, 'Tutorial customer survived or duplicated Day 1'
+ R['day_1_handoff']={'day':1,'customer_id':'A','visit':1,'index':0,'one_customer':True}
+ assert flow.get_editor_property('TutorialHintRef') is None
+ R['tutorial_hint_released']=True;save()
  if interaction:interaction.destroy_component(pawn)
  R['pass']=True;R['complete']=True;save()
 

@@ -1,0 +1,29 @@
+{
+  "status": "PASS",
+  "generator_runs": 2,
+  "reproducible_wav_sha256": {
+    "RS004_QuietCircuit.wav": "9d2c2aa1f4fc3cde2ffec0b481d7df5a528fc4d9aa16bf85b126403595f0067b",
+    "RS005_SmallTable.wav": "a02a049826c182aeb716db9fbbe8ac8a7e5700244fb226fe40602af8ea6a1eef",
+    "RS006_OpenMeasure.wav": "51bc3e07ce90795a8d17bd3052dec77d57a67697dd30a654ab32139df226bac1"
+  },
+  "original_sources_unchanged_sha256": {
+    "compose_music.py": "ebf5aad79f9265e542d44b5b177351877a22963062f54f26676a3a9089161adf",
+    "RS001_Best.wav": "3daf11260adf11dd0d272a665b14e754be82801bc5b3c8684cb9f21d1767a2ef",
+    "RS002_Good.wav": "0808c40559f00838c94e00b810510fc869c3097e3f8efcb01a734c6441382ff6",
+    "RS003_Poor.wav": "62e6a99004cb0be00546a234c5b2a1b523be7c12602d52af08203bbd4970e9f5"
+  },
+  "test_sha256": "ee0429e5ce2902d06dc507160d9449ebab2097a455bbfc2c7dedeff51eb976db",
+  "checks": [
+    "six instrument envelopes and seed repeatability",
+    "unknown instrument rejection",
+    "stereo 48000 Hz PCM16",
+    "25-35 second duration",
+    "zero clipping",
+    "zero endpoints and quiet first millisecond",
+    "integrated LUFS -20 to -17",
+    "no silent run of 200 ms",
+    "two byte-identical generator rebuilds",
+    "four original source hashes unchanged"
+  ],
+  "listening_review": "MANUAL PENDING"
+}

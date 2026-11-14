@@ -48,13 +48,19 @@ try:
  assert fields['CustomerID']=='C01' and fields['Personality']=='Traditional' and fields['MusicPreference']=='Jazz' and fields['Mood']=='Quiet'
  assert fields['Name']=='중년 손님'
  assert [row['IsEndNode'] for row in rows]==[False,False,False,False,True]
+ import sys
+ sys.path.insert(0,str(Path(unreal.Paths.project_dir())/'Scripts/Unreal'))
+ from narrative_validation_support import assert_reference_integrity,canonical_record
+ from record_expansion_support import RECORD_IDS
+ R['narrative_reference_integrity']=assert_reference_integrity()
  bp=unreal.load_asset('/Game/RecordShop/UI/RecordSelection/WBP_RecordSelect')
+ assert not any(n.get_class().get_name()=='K2Node_MakeStruct' for n in unreal.BlueprintGraphEditor.get_graph_editor_by_name(bp,'EventGraph').list_all_nodes())
+ catalogue=unreal.load_asset('/Game/RecordShop/Data/Records/DA_RecordCatalogue');table=catalogue.get_editor_property('Table')
+ assert list(map(str,unreal.DataTableFunctionLibrary.get_data_table_row_names(table)))==RECORD_IDS
  records=[]
- for node in unreal.BlueprintGraphEditor.get_graph_editor_by_name(bp,'EventGraph').list_all_nodes():
-  if node.get_class().get_name()!='K2Node_MakeStruct':continue
-  record={str(pin.get_pin_name()).split('_')[0]:pin.get_pin_value() for pin in node.list_input_pins()}
-  if 'RecordID' not in record:continue
-  assert all(record.get(key) not in (None,'','None') for key in ('RecordID','Title','Artist','Genre','Mood','Energy','Theme'))
+ for identity in ('RS001','RS002','RS003'):
+  ok,data=catalogue.call_method('ResolvePlayableRecord',args=(identity,));assert ok,identity
+  record=canonical_record(data)
   record['expected_score']=sum((record['Mood']==fields['Mood'],record['Genre']==fields['MusicPreference'],record['Theme']==fields['Personality']))
   records.append(record)
  assert {record['RecordID']:record['expected_score'] for record in records}=={'RS001':3,'RS002':2,'RS003':0}
@@ -70,7 +76,7 @@ try:
  font_path='/Game/RecordShop/UI/Fonts/NanumGothic_Font'
  assert font_path in R['packages'] and '/Game/RecordShop/UI/Fonts/NanumGothic' in R['packages']
  ui_text=[]
- for suffix in ('Dialogue/WBP_Dialogue','RecordSelection/WBP_RecordSelect','Turntable/WBP_Turntable','Result/WBP_Result_IntegrationFallback'):
+ for suffix in ('Dialogue/WBP_Dialogue','RecordSelection/WBP_RecordSelect','Turntable/WBP_Turntable','Result/WBP_Result_IntegrationFallback','Prologue/WBP_Prologue'):
   widget_bp=unreal.load_asset('/Game/RecordShop/UI/'+suffix)
   tree=next(t for t in unreal.ObjectIterator(unreal.WidgetTree) if t.get_outer()==widget_bp)
   for widget in unreal.ObjectIterator(unreal.Widget):
@@ -82,6 +88,7 @@ try:
    latin=re.findall(r'[A-Za-z]+',text)
    assert all(word in ('LP','Esc','RPM') for word in latin),(widget.get_name(),text)
    ui_text.append({'widget':suffix,'name':widget.get_name(),'text':text})
+ assert '/Game/RecordShop/UI/Prologue/WBP_Prologue' in R['packages']
  assert not any('Mina' in str(row) for row in rows)
  R['korean_ui']={'texts':ui_text,'allowed_latin':['LP (record format)','Esc (keyboard key)','RPM (rotation speed)'],'cooked_font':font_path}
  # Physical presentation must survive a fresh asset load and cook, not just PIE overrides.

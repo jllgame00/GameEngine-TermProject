@@ -1,0 +1,20 @@
+{
+  "source_head": "bf949b390e54338f81cc70f87ea9a7cfaadba2e4",
+  "asset_sha256": {
+    "Content/CustomerDialogue.uasset": "872dbd16f39cbc4b61da81dbd9dfa6bcbc0ad4dd9379136300894d0850f3eed5",
+    "Content/RecordShop/Characters/Customers/Customer01/Blueprints/BP_Customer01.uasset": "8a3048d31d10f18c103f3fa9f6e8a7fff4b92c99f185dfc686f87f913fb7f067",
+    "Content/RecordShop/Data/Structs/ST_RecordData.uasset": "33ce13780d216b4410105707d34707aedb181786b170ba493efd2d35fe723b64"
+  },
+  "a1_rows_sha256": "7bfa933b1b612309e476b6ceaaa155ec1fc36a9419c98debbc715534e7f5a363",
+  "a1_display_lines_sha256": "c7e2623244f103ed721207ac59e01a66747b6578b80f05e442353aed55a59070",
+  "record_semantic_sha256": {
+    "RS001": "1b950abbb30349e597f298173149ea31fe932c32fd7166bb8cc07708d07f622a",
+    "RS002": "57f1c4cc62e18c94c05eb0e2cbb042014f1535c1d59b1c4387f6314bb364b5d1",
+    "RS003": "4b48eaa7c80050dca2047dd6583af4d8549884c4c2f377a89e15e646c39b859a"
+  },
+  "record_ftext_identity_sha256": {
+    "RS001": "9ce139ad7ea67ca1bfe5cbe892ce5f8f842c9e8761d6a84ebbc0995d86872b40",
+    "RS002": "7d2d1c17ea42831572659d09e2310cc7a6b3765da30a5df5f689aeb843c1f555",
+    "RS003": "df5bdf566406a17961722eead2346175b426fb7152b6d04394abf1c751109daf"
+  }
+}

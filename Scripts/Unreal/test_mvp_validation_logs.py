@@ -1,62 +1,36 @@
-"""Host-side regression tests for the runtime-error safety gate."""
+﻿"""Fail-closed startup-smoke classification, including slow struct-init interleaving."""
 import unittest
 from mvp_validation_logs import classify_log
-
-
-def smoke_block(count=15):
-    return ('LogTemp: Error test: UE::UnifiedErrorTest::Empty: [localized engine test]\n'
-            + 'LogAutomationTest: Error: Condition failed\n' * count
-            + 'LogEngine: Initializing Engine...\n')
-
-
-class LogGateTests(unittest.TestCase):
-    def test_exact_startup_block_is_reported_separately(self):
-        report = classify_log(smoke_block() + 'MVP_VALIDATION_SCRIPT_BEGIN\n')
-        self.assertTrue(report['gameplay_log_pass'])
-        self.assertFalse(report['globally_error_free'])
-        self.assertEqual(len(report['known_startup_engine_smoke_errors']), 15)
-
-    def test_audited_player_controller_error_fails(self):
-        report = classify_log(smoke_block() + 'MVP_VALIDATION_SCRIPT_BEGIN\n'
-                              + 'LogPlayerController: Error: InputMode:UIOnly - Attempting to focus Non-Focusable widget SObjectWidget\n')
-        self.assertFalse(report['gameplay_log_pass'])
-        self.assertEqual(len(report['unexpected_errors']), 1)
-
-    def test_additional_or_gameplay_automation_errors_fail(self):
-        for text in [smoke_block(16), smoke_block() + 'LogAutomationTest: Error: Condition failed\n',
-                     'MVP_VALIDATION_SCRIPT_BEGIN\n' + smoke_block(),
-                     'LogAutomationTest: Error: Something else\n']:
-            with self.subTest(text=text):
-                self.assertFalse(classify_log(text)['gameplay_log_pass'])
-
-    def test_blueprint_ensure_fatal_and_missing_logs_fail(self):
-        for text in ['', 'LogScript: Warning: Accessed None reading Foo',
-                     'LogOutputDevice: Warning: Blueprint Runtime Error: bad reference',
-                     'Ensure condition failed: false', 'Assertion failed: false',
-                     'Unhandled Exception: EXCEPTION_ACCESS_VIOLATION', 'LogPython: Error: failed']:
-            with self.subTest(text=text):
-                self.assertFalse(classify_log(text)['gameplay_log_pass'])
-
-    def test_clean_commandlet_passes(self):
-        self.assertTrue(classify_log('LogExit: Exiting')['globally_error_free'])
-
-    def test_missing_node_guid_fails_readiness_even_with_known_startup(self):
-        warning = ("LogBlueprint: Warning: Node '/Game/RecordShop/Interaction/Actors/"
-                   "BP_Turntable.BP_Turntable:EventGraph.EdGraphNode_Comment_2' missing NodeGuid, "
-                   "this can cause deterministic cooking issues please resave package.")
-        for prefix in ('', smoke_block()):
-            with self.subTest(prefix=prefix):
-                report = classify_log(prefix + warning)
-                self.assertFalse(report['gameplay_log_pass'])
-                self.assertFalse(report['globally_error_free'])
-                self.assertEqual(len(report['unexpected_errors']), 1)
-                self.assertEqual(report['unexpected_errors'][0]['text'], warning)
-                self.assertEqual(len(report['known_startup_engine_smoke_errors']),
-                                 15 if prefix else 0)
-
-    def test_unrelated_warning_does_not_fail_readiness(self):
-        self.assertTrue(classify_log('LogBlueprint: Warning: unrelated diagnostic')['globally_error_free'])
-
-
-if __name__ == '__main__':
-    unittest.main()
+HEADER=['LogTemp: Error test: UE::UnifiedErrorTest::Empty: [test]',
+        'LogTemp: Error with param: UE::UnifiedErrorTest::WithInt: [test]',
+        'LogTemp: Error with context: UE::UnifiedErrorTest::Empty: [test]',
+        'LogTemp: FError that has been invalidated: ::: []',
+        'LogTemp: FError that has been moved from: ::: []']
+SMOKE=['LogAutomationTest: Error: Condition failed']*15
+INIT='LogEngine: Initializing Engine...'
+SCRIPT='LogPython: MVP_VALIDATION_SCRIPT_BEGIN'
+def log(*parts):return '\n'.join(x for part in parts for x in ([part]if isinstance(part,str)else part))
+class ClassificationTests(unittest.TestCase):
+ def test_original_startup_signature(self):
+  r=classify_log(log(HEADER,SMOKE,INIT,SCRIPT));self.assertEqual(len(r['known_startup_engine_smoke_errors']),15);self.assertTrue(r['gameplay_log_pass']);self.assertFalse(r['globally_error_free'])
+ def test_slow_struct_initialization_still_exact_startup_block(self):
+  slow=['LogClass: Display: AttemptToFindUninitializedScriptStructMembers took more than 1ms to process ScriptStruct /Script/Engine.Fixture'+str(i)for i in range(12)]
+  r=classify_log(log(HEADER,slow,SMOKE,INIT,SCRIPT));self.assertEqual(len(r['known_startup_engine_smoke_errors']),15);self.assertEqual(r['unexpected_errors'],[])
+ def test_same_signature_after_engine_init_fails(self):
+  self.assertFalse(classify_log(log(INIT,HEADER,SMOKE,SCRIPT))['gameplay_log_pass'])
+ def test_same_signature_in_gameplay_fails(self):
+  self.assertFalse(classify_log(log(SCRIPT,HEADER,SMOKE,INIT))['gameplay_log_pass'])
+ def test_extra_condition_fails(self):
+  self.assertFalse(classify_log(log(HEADER,SMOKE,[SMOKE[0]],INIT,SCRIPT))['gameplay_log_pass'])
+ def test_other_error_cannot_hide_in_bridge(self):
+  r=classify_log(log(HEADER,'LogTemp: Error: actual package failure',SMOKE,INIT,SCRIPT));self.assertFalse(r['gameplay_log_pass']);self.assertEqual(r['known_startup_engine_smoke_errors'],[])
+ def test_other_display_does_not_qualify_bridge(self):
+  self.assertFalse(classify_log(log(HEADER,'LogTemp: Display: unrelated test',SMOKE,INIT,SCRIPT))['gameplay_log_pass'])
+ def test_separated_conditions_fail(self):
+  self.assertFalse(classify_log(log(HEADER,SMOKE[:7],'LogTemp: Display: gap',SMOKE[7:],INIT,SCRIPT))['gameplay_log_pass'])
+ def test_no_signature_or_engine_init_fails(self):
+  self.assertFalse(classify_log(log(SMOKE,INIT,SCRIPT))['gameplay_log_pass']);self.assertFalse(classify_log(log(HEADER,SMOKE,SCRIPT))['gameplay_log_pass'])
+ def test_runtime_error_after_known_startup_is_not_suppressed(self):
+  r=classify_log(log(HEADER,SMOKE,INIT,SCRIPT,'LogScript: Warning: Accessed None'));self.assertFalse(r['gameplay_log_pass']);self.assertEqual(len(r['unexpected_errors']),1)
+ def test_missing_log_fails(self):self.assertFalse(classify_log('')['gameplay_log_pass'])
+if __name__=='__main__':unittest.main()

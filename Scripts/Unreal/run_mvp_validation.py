@@ -5,6 +5,7 @@ p=argparse.ArgumentParser()
 p.add_argument('script');p.add_argument('--rendered',action='store_true');p.add_argument('--commandlet',action='store_true');p.add_argument('--audio',action='store_true');p.add_argument('--name',default='validation')
 p.add_argument('--windowed',action='store_true',help='Use a native editor window for synthetic Windows keyboard input')
 p.add_argument('--result-navigation',action='store_true',help='Use synthetic Slate Tab/Enter navigation for Result in NullRHI')
+p.add_argument('--title',action='store_true',help='Exercise real cold Title boot; legacy validations explicitly opt into Prologue boot')
 a=p.parse_args();root=pathlib.Path(__file__).resolve().parents[2]
 if pathlib.Path(a.script).name=='validate_mvp_cycle.py' and not (a.result_navigation or (a.rendered and a.windowed)):
  p.error('Cycle Result input requires --rendered --windowed, or --result-navigation for NullRHI.')
@@ -16,6 +17,7 @@ wrapper.write_text('import os, unreal\nunreal.log("MVP_VALIDATION_SCRIPT_BEGIN")
 if a.result_navigation:
  wrapper.write_text('import os\nos.environ["MVP_RESULT_NAVIGATION"]="1"\n'+wrapper.read_text(encoding='utf-8'),encoding='utf-8')
 args=['C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe',str(root/'RecordShop.uproject'),'-EnablePlugins=PythonScriptPlugin,EditorScriptingUtilities','-unattended','-nosound','-nop4','-nosplash','-DDC-ForceMemoryCache','-ddc=(Local=(Type=FileSystem,Path='+str(root/'DerivedDataCache')+'))','-UserDir='+str(folder/'User'),'-abslog='+str(log)]
+if not a.title:args+=['-RecordShopProductionValidation']
 if not a.rendered:args+=['-nullrhi']
 if a.audio:
  args.remove('-nosound')
@@ -71,7 +73,8 @@ if data.get('dialogue_next_position_validation'):
   summary['dialogue_next_pixels']={'pass':True,'boundaries':boundaries,'frames':[x['path'] for x in frames]}
  except Exception as error:summary['dialogue_next_pixels']={'pass':False,'error':repr(error)}
  summary['assertions_pass']=summary['assertions_pass'] and summary['dialogue_next_pixels']['pass']
-summary['process_pass']=code==0 and summary['complete'] and summary['assertions_pass'] and summary['gameplay_log_pass']
+summary['fatal']=data.get('fatal')
+summary['process_pass']=code==0 and summary['complete'] and summary['assertions_pass'] and not summary['fatal'] and summary['gameplay_log_pass']
 (folder/(name+'-process.json')).write_text(json.dumps(summary,indent=2),encoding='utf-8')
 print(json.dumps(summary,indent=2),flush=True)
 sys.exit(0 if summary['process_pass'] else 1)
