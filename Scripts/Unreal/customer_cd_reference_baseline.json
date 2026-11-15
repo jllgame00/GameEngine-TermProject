@@ -1,0 +1,31 @@
+{
+  "source_head": "1f9e6d19689d4a02d7b62b616829fcc281a35059",
+  "asset_sha256": {
+    "Content/CustomerDialogue.uasset": "872dbd16f39cbc4b61da81dbd9dfa6bcbc0ad4dd9379136300894d0850f3eed5",
+    "Content/DialogueManager.uasset": "34a74ae2b23b5d30b068c1c119c6fa2cebdc96f2c896f82103d954182b96539a",
+    "Content/RecordShop/Characters/Customers/Customer01/Blueprints/BP_Customer01.uasset": "8a3048d31d10f18c103f3fa9f6e8a7fff4b92c99f185dfc686f87f913fb7f067",
+    "Content/RecordShop/Core/Flow/BP_GameFlowManager.uasset": "a65b843043889b1002098b85f11f8505b262160a4c8b48458234427a0da8de29",
+    "Content/RecordShop/Data/Narrative/BP_VisitNarrativeDefinition.uasset": "a187b75e80aa59a0f35806dfc4e10fcb9c63f39e45b0a2dc705da1eaffb77c58",
+    "Content/RecordShop/Data/Narrative/DA_A1_Narrative.uasset": "21aa10a737f5f879d15a3c9c57583b38b15a9ad1044499ccbbb558bd2a49007a",
+    "Content/RecordShop/Data/Narrative/DA_A2_Narrative.uasset": "0fa8adb145c43a05eccd1bd7eb79250a0ffcd88f3250c74697391f1174e70496",
+    "Content/RecordShop/Data/Narrative/DA_A3_Narrative.uasset": "e52d380e9074c5a05952573e3848011a1509968b8971543a78021b4a4ce4431b",
+    "Content/RecordShop/Data/Narrative/DA_TutorialNarrative.uasset": "c1c9f9ec3fdb33ddba4b504318d9a4574ba9e8896faed0a24ab0c323b120e7aa",
+    "Content/RecordShop/Data/Narrative/DT_A_RevisitDialogue.uasset": "d959e115962c89d5f552b65c0af7c8a551130950a8be186baed8a4dd213bd393",
+    "Content/RecordShop/Data/Narrative/DT_TutorialDialogue.uasset": "e0af74138cef4883f2eebd55aa2dd817582f40301f53deb19063ead2f839cefb",
+    "Content/RecordShop/Data/Records/BP_RecordCatalogue.uasset": "99a2d8e2cd8aba724f0cd7701833a93b4e683d6fa038a74d4c072256674c5052",
+    "Content/RecordShop/Data/Records/DA_RecordCatalogue.uasset": "e6c9f16a3e8c0ae5cea1edd6a5abd1177cb545e4dbd115844fb46ab1c02d8845",
+    "Content/RecordShop/Data/Records/DT_RecordCatalogue.uasset": "d8e2b4666176436ff7e37229a5886c0bac029f85906ed4663b6a9a6873295cf5",
+    "Content/RecordShop/Data/Schedule/DA_Visit_A_1.uasset": "d5db4decf86e227d041975655fe0b7a1aa90db2bb28a64503cae0a86b6b6c8a4",
+    "Content/RecordShop/Data/Schedule/DA_Visit_A_2.uasset": "a39f78e2fd0731a5c2cda1408ef0e7e4044285f1d32180ac66b924b8a88c4d37",
+    "Content/RecordShop/Data/Schedule/DA_Visit_A_3.uasset": "dffbf107e678707ab32b86241a52e64499045c80c5bead6aa8ea845aa0f22ff9",
+    "Content/RecordShop/Data/Structs/ST_RecordData.uasset": "33ce13780d216b4410105707d34707aedb181786b170ba493efd2d35fe723b64",
+    "Content/RecordShop/Data/Narrative/DT_B_Dialogue.uasset": "fbe3c86ef8567d2c6b42b3e0ebbcb4193128a214faa5bccf7e35788587534658",
+    "Content/RecordShop/UI/Result/WBP_Result_IntegrationFallback.uasset": "3a388bc6d8e1c0fb9093ae50c53b17c411ce731ad620f1810309f0600e8a5d03",
+    "Content/RecordShop/Data/Narrative/DA_B1_Narrative.uasset": "0e34a5fd11f5b6818cc2be1855cdf76925604a0bb04cee77e2f425a7771d492b",
+    "Content/RecordShop/Data/Narrative/DA_B2_Narrative.uasset": "1f4f5dc38131bf7a94fb03bb746279f1985abc50db8d9b9c9bc752ba7fb6e505",
+    "Content/RecordShop/Data/Narrative/DA_B3_Narrative.uasset": "cbd6cfc4501ac8b443722b580a415e68cb0793cba0f8eb2309a858ef1d8935db",
+    "Content/RecordShop/Data/Schedule/DA_Visit_B_1.uasset": "0f094619b1d725c5cf0075ac9c4e1dc478c0166a5c41a969d0e29393014a410e",
+    "Content/RecordShop/Data/Schedule/DA_Visit_B_2.uasset": "10405bf406edea2de485c056ddaf34ad6ea1be4338e3d4684c0cd7b2aaabb17d",
+    "Content/RecordShop/Data/Schedule/DA_Visit_B_3.uasset": "03e90a3db60fe7af0fc5df60073e8313124704c362d2a15a465cdc392d764024"
+  }
+}

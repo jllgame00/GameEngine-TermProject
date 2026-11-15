@@ -1,0 +1,27 @@
+{
+  "status": "CONTENT_LOCK",
+  "title": "RecordShop",
+  "new_game": "새 게임",
+  "quit_game": "게임 종료",
+  "pages": [
+    {"phase":"EndingDialogue","title":"마지막 영업을 마치고","body":"마지막 손님이 가게를 나섰다.\n부모님에게서 짧은 연락이 왔다.","action":"계속"},
+    {"phase":"EndingDialogue","title":"부모님에게서 온 연락","body":"오늘이 마지막 날이네.\n일주일 동안 가게 맡아줘서 고마워.\n마감하면 편히 쉬렴.","action":"계속"},
+    {"phase":"EndingDialogue","title":"답장","body":"오늘 손님도 다 다녀가셨어요.\n이제 마감할게요.","action":"계속"},
+    {"phase":"EndingCompletion","title":"일주일의 운영을 마쳤습니다.","body":"","action":"크레딧 보기"},
+    {"phase":"Credits","title":"만든 사람들","body":"정우빈 — Integration / Core Flow / Camera\n전찬 — Interaction / Recommendation / Turntable\n주정은 — NPC / AI / Animation\n조현우 — UI / 2D / Audio / Presentation\n김민서 — Environment / 3D / Lighting\n박준혁 — Dialogue / Data / Narrative","action":"다음"},
+    {"phase":"Credits","title":"음악과 아트","body":"오리지널 음악 — RecordShop 로컬 합성 음원\nRS001~RS006: 프로젝트의 재현 가능한 합성·편곡 소스\n\nRS004~RS006 커버 — 코드 기반 벡터 일러스트\n제작 지원 — OpenAI Codex for RecordShop\n\n글꼴 — NanumGothic\nCopyright (c) 2010, NHN Corporation\nSIL Open Font License 1.1","action":"다음"},
+    {"phase":"Credits","title":"Unreal Engine","body":"RecordShop uses Unreal® Engine. Unreal® is a trademark or registered trademark of Epic Games, Inc. in the United States of America and elsewhere.\n\nUnreal® Engine, Copyright 1998 – 2026, Epic Games, Inc. All rights reserved.","action":"다음"},
+    {"phase":"Credits","title":"외부 에셋 출처 검증","body":"CREDIT_VERIFICATION_REQUIRED\n\nCigar_room / Fab Vintage Stereo\nShopOwner·Customer01 모델 및 외부 애니메이션\n\n확인되지 않은 제작자·배포처·라이선스는 기재하지 않았습니다.\n출시 전 권리 검증이 필요합니다.","action":"다음"},
+    {"phase":"Credits","title":"함께해 주셔서 고맙습니다.","body":"","action":"타이틀로"}
+  ],
+  "credits_sources": [
+    {"asset":"Unreal Engine","source":"https://www.unrealengine.com/eula/unreal","status":"REQUIRED_NOTICE_INCLUDED_RELEASE_REVIEW_REQUIRED"},
+    {"asset":"NanumGothic","source":"Content/RecordShop/Licenses/NanumGothic_License.txt","license":"SIL Open Font License 1.1","status":"NOTICE_CONFIRMED"},
+    {"asset":"RS001-RS003 audio","source":"ArtSource/Audio/Music/compose_music.py","status":"LOCAL_ORIGINAL_PROVENANCE"},
+    {"asset":"RS004-RS006 audio","source":"ArtSource/Audio/Music/expansion-audio-provenance.json","status":"LOCAL_ORIGINAL_PROVENANCE"},
+    {"asset":"RS004-RS006 covers","source":"ArtSource/Records/Covers/provenance.json","status":"LOCAL_ORIGINAL_PROVENANCE"},
+    {"asset":"Cigar_room","source":"existing namespace/import metadata","status":"CREDIT_VERIFICATION_REQUIRED"},
+    {"asset":"Fab/Vintage_Stereo_Hi-Fi_Stack_w__Speakers","source":"existing namespace/dependency","status":"CREDIT_VERIFICATION_REQUIRED"},
+    {"asset":"ShopOwner/Customer01 models and Talking/SendingFax/MM/MF animations","source":"existing import/source manifest; contributor is not upstream rights proof","status":"CREDIT_VERIFICATION_REQUIRED"}
+  ]
+}

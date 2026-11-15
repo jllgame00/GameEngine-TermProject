@@ -482,9 +482,14 @@ def production_audio_replay_checks(world, turntable_class, source_record, result
                 assert 'FADING_OUT' in str(audio.get_play_state()), str(audio.get_play_state())
             # Do not keep or compare an AudioComponent proxy after completion.
             audio = None
-            deadline=time.monotonic()+40
+            playback_wait_started=time.monotonic()
+            playback_world_started=unreal.GameplayStatics.get_time_seconds(world)
+            deadline=playback_wait_started+40
             while not actor.get_editor_property('CompletionSent'):
-                assert time.monotonic()<deadline
+                if time.monotonic()>=deadline:
+                    active=actor.get_editor_property('PlaybackAudio')
+                    observations.append({'timeout_repeat':repeat+1,'sound_duration':sound.get_editor_property('duration'),'audio_state':str(active.get_play_state()) if active else None,'turntable_step':actor.get_editor_property('TurntableStep'),'motion_alpha':actor.get_editor_property('TonearmMotionAlpha'),'world_time':unreal.GameplayStatics.get_time_seconds(world),'wall_wait_seconds':time.monotonic()-playback_wait_started,'world_wait_seconds':unreal.GameplayStatics.get_time_seconds(world)-playback_world_started})
+                    raise AssertionError('Natural production LP completion timed out')
                 yield
             assert actor.get_editor_property('PlaybackAudio') is None
             stopped = music_components()
@@ -493,6 +498,8 @@ def production_audio_replay_checks(world, turntable_class, source_record, result
             observations.append({'repeat':repeat+1,'sound':sound.get_path_name(),'one_component':True,'contact_before_audio':True,'completion':'early fade then physical return' if repeat==0 else 'full natural audio finished callback after reset',
                                  'component_path':audio_path,'before_reset_playback':before,
                                  'during_playback':voices,'after_completion':stopped,
+                                 'wall_wait_seconds':time.monotonic()-playback_wait_started,
+                                 'world_wait_seconds':unreal.GameplayStatics.get_time_seconds(world)-playback_world_started,
                                  'completed_component':'live and stopped' if audio_path in stopped else 'absent from live components'})
         result['isolated']['production_music_fade_reset_replay']={'pass':True,'observations':observations,'limit':'Isolated direct Turntable commands; all natural recommendation paths are validated separately.'}
     except Exception:
@@ -509,6 +516,10 @@ def prepare_ui_contact_diagnostic(actor, pawn):
     pawn.get_component_by_class(unreal.CharacterMovementComponent).stop_movement_immediately()
     station = actor.get_actor_location() + unreal.Vector(0, -80, 2.2)
     pawn.set_actor_location_and_rotation(station, unreal.Rotator(pitch=0, yaw=90, roll=0), False, True)
+    # Production contact now reads the collision-resolved OwnerInteractionStation.
+    # Initialize it through the existing authority; never force readiness or station data.
+    actor.call_method('BeginOwnerAlignment')
+    actor.call_method('StopOwnerPresentation')
     actor.call_method('EvaluateOwnerContact')
     assert actor.get_editor_property('OwnerContactReady'), ('Actual diagnostic station is not ready',
         pawn.get_actor_location().export_text(), station.export_text(),
@@ -759,6 +770,21 @@ def run():
  global world,flow,pawn,pc
  while not editor.get_game_world():yield
  world=editor.get_game_world();flow=unreal.GameplayStatics.get_all_actors_of_class(world,cls(FLOW))[0];pawn=unreal.GameplayStatics.get_player_pawn(world,0);pc=unreal.GameplayStatics.get_player_controller(world,0)
+ # Isolated backend diagnostics disable scheduling on this unsaved live actor only.
+ # Full natural cycles and week simulation exercise the default enabled schedule.
+ flow.set_editor_property('EnableDaySchedule',False)
+ flow.set_editor_property('EnableNarrativeRouting',False)
+ R['day_fixture']='unsaved EnableDaySchedule=False and EnableNarrativeRouting=False for isolated legacy backend calls only'
+ from prologue_validation_support import exercise_opening
+ def advance_opening(panel):
+  click(panel,'Continue')
+  for _ in range(4):yield
+ R['opening']=yield from exercise_opening(world,flow,pc,pawn,advance_opening)
+ # Isolated diagnostics may directly probe idempotency; contiguous E2E never does.
+ for _ in range(3):flow.call_method('AdvancePrologue')
+ assert flow.get_editor_property('PrologueStage')==3
+ flow.call_method('CompleteTutorial')
+ assert not flow.get_editor_property('TutorialComplete')
  while not widgets(DU):
   assert time.monotonic()-start<70
   yield
@@ -918,6 +944,9 @@ def run():
   assert not any(count_modals().values())
   return {'active_customer':None,'modals':count_modals(),'state':'Explore'}
  check('actual_exit_and_repeated_cleanup',cleanup)
+ flow.call_method('StopStoreBGM')
+ until=time.monotonic()+.75
+ while time.monotonic()<until:yield
  yield from enhanced_input_checks(world,flow,pawn,[(shelves[0],cls(SU)),(tt,cls(TU))],R,save)
  interaction=pawn.call_method('AddComponentByClass',args=(unreal.WidgetInteractionComponent.static_class(),False,unreal.Transform(),False))
  interaction.set_component_tick_enabled(False);interaction.activate(True)
