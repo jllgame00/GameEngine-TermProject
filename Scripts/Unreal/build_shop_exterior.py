@@ -282,5 +282,6 @@ try:
 except Exception:
     R['error'] = traceback.format_exc(); log(R['error'])
 R['log'] = LOG
-p = os.path.join(unreal.Paths.project_saved_dir(), 'ClaudeTmp', 'exterior_result.json')
+d = os.path.join(unreal.Paths.project_saved_dir(), 'EnvBuild'); os.makedirs(d, exist_ok=True)
+p = os.path.join(d, 'exterior_result.json')
 json.dump(R, open(p, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)

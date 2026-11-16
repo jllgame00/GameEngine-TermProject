@@ -148,4 +148,5 @@ try:
 except Exception:
     R['error'] = traceback.format_exc(); log(R['error'])
 R['log'] = LOG
-json.dump(R, open(os.path.join(unreal.Paths.project_saved_dir(), 'ClaudeTmp', 'daylight_result.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+d = os.path.join(unreal.Paths.project_saved_dir(), 'EnvBuild'); os.makedirs(d, exist_ok=True)
+json.dump(R, open(os.path.join(d, 'daylight_result.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
