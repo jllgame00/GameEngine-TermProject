@@ -11,10 +11,24 @@ def classify_log(text):
     # This exact 15-line contiguous engine startup block was reproduced without
     # project Python or PIE. Never allow the same message in gameplay, additional
     # messages, or a different automation failure to inherit this classification.
+    header = ('LogTemp: Error test: UE::UnifiedErrorTest::Empty:',
+              'LogTemp: Error with param: UE::UnifiedErrorTest::WithInt:',
+              'LogTemp: Error with context: UE::UnifiedErrorTest::Empty:',
+              'LogTemp: FError that has been invalidated: ::: []',
+              'LogTemp: FError that has been moved from: ::: []')
+    allowed = header + ('LogClass: Display: AttemptToFindUninitializedScriptStructMembers '
+                        'took more than 1ms to process ScriptStruct ',)
+    marker = max((i for i, line in enumerate(lines[:smoke[0] if smoke else 0])
+                  if header[0] in line), default=-1)
+    bridge = lines[marker:smoke[0]] if marker >= 0 and smoke else []
+    # Slow engine initialization can insert any number of these exact struct
+    # timing diagnostics. Recognize structure, not an arbitrary line-distance;
+    # unrelated lines/errors cannot make a different test inherit the exception.
+    bridge_valid = (bool(bridge)
+                    and all(any(token in line for line in bridge) for token in header)
+                    and all(any(token in line for token in allowed) for line in bridge))
     known = (len(smoke) == 15 and smoke == list(range(smoke[0], smoke[0] + 15))
-             and smoke[-1] < initialized
-             and any('LogTemp: Error test: UE::UnifiedErrorTest::Empty:' in line
-                     for line in lines[max(0, smoke[0] - 8):smoke[0]])
+             and smoke[-1] < initialized and bridge_valid
              and not any('MVP_VALIDATION_SCRIPT_BEGIN' in line or 'MVP_STAGE ' in line
                          for line in lines[:smoke[-1] + 1]))
     for i, line in enumerate(lines):
