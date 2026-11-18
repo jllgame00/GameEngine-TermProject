@@ -2,7 +2,7 @@
   "source_head": "bf949b390e54338f81cc70f87ea9a7cfaadba2e4",
   "asset_sha256": {
     "Content/CustomerDialogue.uasset": "872dbd16f39cbc4b61da81dbd9dfa6bcbc0ad4dd9379136300894d0850f3eed5",
-    "Content/RecordShop/Characters/Customers/Customer01/Blueprints/BP_Customer01.uasset": "8a3048d31d10f18c103f3fa9f6e8a7fff4b92c99f185dfc686f87f913fb7f067",
+    "Content/RecordShop/Characters/Customers/Customer01/Blueprints/BP_Customer01.uasset": "55edfcc6a0bc55600d48c4482d44382cc2f6af9b1a10f097ed7f450de5e60092",
     "Content/RecordShop/Data/Structs/ST_RecordData.uasset": "33ce13780d216b4410105707d34707aedb181786b170ba493efd2d35fe723b64"
   },
   "a1_rows_sha256": "7bfa933b1b612309e476b6ceaaa155ec1fc36a9419c98debbc715534e7f5a363",
